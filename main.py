@@ -51,7 +51,7 @@ if st.button("✨ Generate Naskah & Visual Plan"):
     else:
         with st.spinner("Meminta AI meracik naskah..."):
             genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash')
             
             # Prompt yang dikunci formatnya agar mudah dibaca oleh Python
             prompt = f"""
@@ -135,7 +135,7 @@ if st.session_state.step == 3 and st.session_state.final_video_path:
             with st.chat_message("assistant"):
                 with st.spinner("Menganalisa perintah Kakak..."):
                     genai.configure(api_key=gemini_key)
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-2.5-flash')
                     
                     # AI diberi "Konteks" tentang video saat ini agar dia paham apa yang sedang diedit
                     prompt = f"""
