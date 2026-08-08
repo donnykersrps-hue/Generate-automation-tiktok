@@ -21,13 +21,24 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 # --- 2. SIDEBAR (Pengaturan API Key) ---
+gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+pexels_key = st.secrets.get("PEXELS_API_KEY", "")
+
 with st.sidebar:
     st.header("🔑 Pengaturan API Key")
-    gemini_key = st.text_input("Gemini API Key", type="password", help="Dapatkan di Google AI Studio gratis.")
-    pexels_key = st.text_input("Pexels API Key", type="password", help="Dapatkan di Pexels API gratis.")
+    if not gemini_key:
+        gemini_key = st.text_input("Gemini API Key", type="password")
+    else:
+        st.success("✅ Gemini Key Terdeteksi (Secrets)")
+
+    if not pexels_key:
+        pexels_key = st.text_input("Pexels API Key", type="password")
+    else:
+        st.success("✅ Pexels Key Terdeteksi (Secrets)")
+
     st.markdown("---")
     st.caption("Aplikasi berjalan menggunakan Serverless Cloud.")
-
+    
 # --- 3. BAGIAN 1: PEMBUATAN NASKAH & STORYBOARD ---
 st.header("📝 1. Tentukan Topik Konten")
 topic = st.text_input("Masukkan ide konten (contoh: Fakta unik game GTA, arsitektur rumah modern, dll)")
