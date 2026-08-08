@@ -2,9 +2,12 @@ import os
 import requests
 import asyncio
 import edge_tts
-from moviepy.editor import VideoFileClip, AudioFileClip, TextClip, CompositeVideoClip
+from PIL import Image, ImageDraw, ImageFont
+import numpy as np
+from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip
+from moviepy.video.fx.all import loop
 
-# 1. Fungsi Fetch Video dari Pexels
+# ================== 1. FETCH VIDEO DARI PEXELS ==================
 def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
     """Mencari dan mengunduh video vertikal (portrait) dari Pexels."""
     url = f"https://api.pexels.com/videos/search?query={keyword}&per_page=1&orientation=portrait"
@@ -13,11 +16,8 @@ def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
     try:
         response = requests.get(url, headers=headers).json()
         if response.get("videos"):
-            # Ambil resolusi yang paling cocok untuk TikTok (HD/SD portrait)
             video_files = response["videos"][0]["video_files"]
             video_url = next((v["link"] for v in video_files if v["width"] >= 720), video_files[0]["link"])
-            
-            # Proses unduh
             video_data = requests.get(video_url).content
             with open(output_filename, "wb") as f:
                 f.write(video_data)
@@ -28,63 +28,97 @@ def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
         print(f"Error fetching Pexels: {e}")
         return None
 
-# 2. Fungsi Text-to-Speech (Edge-TTS)
+# ================== 2. TEXT-TO-SPEECH (Edge-TTS) ==================
 async def generate_tts(text, output_filename="temp_audio.mp3"):
-    """Mengubah naskah menjadi suara menggunakan AI Voice Edge-TTS."""
-    # id-ID-ArdiNeural (Pria) atau id-ID-GadisNeural (Wanita)
-    voice = "id-ID-ArdiNeural" 
+    voice = "id-ID-ArdiNeural"
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_filename)
     return output_filename
 
 def create_voiceover(text, output_filename="temp_audio.mp3"):
-    """Fungsi pembungkus agar asyncio bisa jalan mulus di Streamlit."""
     asyncio.run(generate_tts(text, output_filename))
     return output_filename
 
-# 3. Fungsi Perakitan (Rendering) Video Utama
-def assemble_video(video_path, audio_path, text_overlay, output_path="final_tiktok.mp4"):
-    """Menggabungkan Video Pexels, Suara TTS, dan Teks Subtitle ke dalam format TikTok."""
+# ================== 3. RENDER TEKS KE GAMBAR (PIL) ==================
+def create_text_image(text, size=(1080, 1920), font_size=65, color='white', stroke_color='black', stroke_width=4):
+    img = Image.new('RGBA', size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    
+    # Coba muat font, fallback ke default
     try:
-        # Load Video dan Audio
+        font = ImageFont.truetype("Arial.ttf", font_size)
+    except:
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
+        except:
+            font = ImageFont.load_default()
+    
+    lines = text.split('\n')
+    line_heights = []
+    max_width = 0
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font)
+        width = bbox[2] - bbox[0]
+        height = bbox[3] - bbox[1]
+        max_width = max(max_width, width)
+        line_heights.append(height)
+    
+    total_height = sum(line_heights) + (len(lines) - 1) * 5
+    y_start = (size[1] - total_height) // 2
+    
+    y = y_start
+    for idx, line in enumerate(lines):
+        bbox = draw.textbbox((0, 0), line, font=font)
+        text_width = bbox[2] - bbox[0]
+        x = (size[0] - text_width) // 2
+        
+        # Outline (stroke)
+        if stroke_width > 0:
+            for dx in range(-stroke_width, stroke_width+1):
+                for dy in range(-stroke_width, stroke_width+1):
+                    if dx != 0 or dy != 0:
+                        draw.text((x+dx, y+dy), line, font=font, fill=stroke_color)
+        # Teks utama
+        draw.text((x, y), line, font=font, fill=color)
+        y += line_heights[idx] + 5
+    
+    return img
+
+# ================== 4. RENDER VIDEO UTAMA ==================
+def assemble_video(video_path, audio_path, text_overlay, output_path="final_tiktok.mp4", resolution=(1080, 1920)):
+    try:
         video_clip = VideoFileClip(video_path)
         audio_clip = AudioFileClip(audio_path)
         
-        # Potong video agar durasinya sama persis dengan panjang suara narasi
-        video_clip = video_clip.subclip(0, audio_clip.duration)
+        if video_clip.duration < audio_clip.duration:
+            video_clip = loop(video_clip, duration=audio_clip.duration)
+        else:
+            video_clip = video_clip.subclip(0, audio_clip.duration)
         
-        # Pasang audio ke dalam video
-        video_clip = video_clip.set_audio(audio_clip)
+        video_clip = video_clip.resize(height=resolution[1])
+        if video_clip.w > resolution[0]:
+            x_center = video_clip.w // 2
+            video_clip = video_clip.crop(x_center - resolution[0]//2, 0, x_center + resolution[0]//2, resolution[1])
         
-        # Buat Teks Overlay (Subtitle Sederhana di tengah layar)
-        # Catatan: Font bisa disesuaikan, kita pakai default standar dulu
-        txt_clip = TextClip(text_overlay, fontsize=60, color='white', bg_color='black', 
-                            font='Arial-Bold', method='caption', size=(video_clip.w * 0.8, None))
+        text_img = create_text_image(text_overlay, size=resolution, font_size=65, color='white', stroke_color='black', stroke_width=4)
+        text_clip = ImageClip(np.array(text_img), transparent=True, ismask=False)
+        text_clip = text_clip.set_duration(video_clip.duration)
         
-        # Posisikan teks di agak bawah (margin bawah) dan durasinya sepanjang video
-        txt_clip = txt_clip.set_position(('center', 0.75), relative=True).set_duration(video_clip.duration)
-        
-        # Gabungkan Video dengan Teks
-        final_clip = CompositeVideoClip([video_clip, txt_clip])
-        
-        # Proses RenderAkhir
-        # Preset 'ultrafast' dan threads=4 agar proses render di Streamlit Cloud lebih kencang
+        final_clip = CompositeVideoClip([video_clip, text_clip]).set_audio(audio_clip)
         final_clip.write_videofile(
-            output_path, 
-            fps=24, 
-            codec="libx264", 
+            output_path,
+            fps=24,
+            codec="libx264",
             audio_codec="aac",
             preset="ultrafast",
-            threads=4
+            threads=4,
+            ffmpeg_params=["-crf", "23"]
         )
         
-        # Tutup file untuk membebaskan memory (Penting untuk cloud server)
         video_clip.close()
         audio_clip.close()
         final_clip.close()
-        
         return output_path
-        
     except Exception as e:
         print(f"Error rendering video: {e}")
-        return Nonetre
+        return None
