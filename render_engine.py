@@ -4,8 +4,7 @@ import asyncio
 import edge_tts
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip
-from moviepy.video.fx.all import loop
+from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip
 
 # ================== 1. FETCH VIDEO DARI PEXELS ==================
 def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
