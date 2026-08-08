@@ -3,4 +3,5 @@ google-generativeai
 moviepy
 edge-tts
 requests
-pillow
+Pillow
+gTTS
