@@ -13,7 +13,7 @@ from moviepy import (
 # ================== SET FFMPEG UNTUK CLOUD ==================
 os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
 
-# ================== WRAPPER FUNCTIONS ==================
+# ================== WRAPPER FUNCTIONS UNTUK KOMPATIBILITAS MOVIEPY ==================
 
 def safe_subclip(clip, start, end):
     try:
@@ -157,7 +157,6 @@ def create_text_image(text, size=(1080, 1920), font_size=52, color='white', stro
         
         x = (size[0] - text_width) // 2
         
-        # Outline tebal agar teks sangat jelas di atas latar video apa pun
         if stroke_width > 0:
             for dx in range(-stroke_width, stroke_width+1):
                 for dy in range(-stroke_width, stroke_width+1):
@@ -169,12 +168,8 @@ def create_text_image(text, size=(1080, 1920), font_size=52, color='white', stro
         
     return img
 
-# ================== 4. RENDER VIDEO DINAMIS & BACKSOUND ==================
+# ================== 4. RENDER VIDEO MULTI-SCENE DINAMIS & BACKSOUND ==================
 def assemble_video(video_paths, audio_path, text_segments, bgm_url=None, output_path="final_tiktok.mp4", resolution=(1080, 1920)):
-    """
-    video_paths: List 3 path video Pexels
-    text_segments: List 3 teks overlay bergantian sesuai scene
-    """
     if not audio_path or not os.path.exists(audio_path):
         print("File audio narasi tidak ditemukan!")
         return None
@@ -185,21 +180,23 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_url=None, output_
 
         audio_clip = AudioFileClip(audio_path)
         total_duration = audio_clip.duration
-        num_scenes = len(video_paths)
+        
+        # Saring video_paths yang valid
+        valid_vpaths = [p for p in video_paths if p and os.path.exists(p)]
+        if not valid_vpaths:
+            print("Tidak ada file video Pexels yang valid!")
+            return None
+
+        num_scenes = len(valid_vpaths)
         scene_duration = total_duration / num_scenes
 
         prepared_clips = []
-        for idx, vpath in enumerate(video_paths):
-            if vpath and os.path.exists(vpath):
-                clip = VideoFileClip(vpath)
-                if clip.duration < scene_duration:
-                    repetitions = int(scene_duration / clip.duration) + 1
-                    clip = concatenate_videoclips([clip] * repetitions)
-                clip = safe_subclip(clip, 0, scene_duration)
-            else:
-                # Fallback jika salah satu video gagal download
-                clip = VideoFileClip(video_paths[0])
-                clip = safe_subclip(clip, 0, scene_duration)
+        for idx, vpath in enumerate(valid_vpaths):
+            clip = VideoFileClip(vpath)
+            if clip.duration < scene_duration:
+                repetitions = int(scene_duration / clip.duration) + 1
+                clip = concatenate_videoclips([clip] * repetitions)
+            clip = safe_subclip(clip, 0, scene_duration)
 
             clip = safe_resize(clip, height=resolution[1])
             if clip.w > resolution[0]:
@@ -220,9 +217,8 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_url=None, output_
         # Gabungkan semua scene video bergantian
         final_video = concatenate_videoclips(prepared_clips)
 
-        # Penanganan Musik Latar (Backsound Instrument Bebas Copyright)
+        # Musik Latar (BGM)
         try:
-            # Mengunduh audio instrumen santai/syahdu
             bgm_path = "temp_bgm.mp3"
             if not os.path.exists(bgm_path):
                 sample_bgm_url = "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"
@@ -236,7 +232,6 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_url=None, output_
                 bgm_clip = concatenate_videoclips([bgm_clip] * reps)
             bgm_clip = safe_subclip(bgm_clip, 0, total_duration)
             
-            # Turunkan volume BGM ke 15% agar narasi utama terdengar sangat jelas
             try:
                 bgm_clip = bgm_clip.volumex(0.15)
             except AttributeError:
