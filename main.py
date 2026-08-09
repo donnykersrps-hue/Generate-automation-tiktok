@@ -53,7 +53,7 @@ if st.button("✨ Generate Naskah & Visual Plan"):
     else:
         with st.spinner("Meminta AI meracik naskah syahdu 60-70 detik..."):
             genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel('gemini-2.5-flash')
+            model = genai.GenerativeModel('gemini-3.6-flash')
             
             prompt = f"""
             Kamu adalah scriptwriter konten edukasi islami bertema ketenangan jiwa untuk TikTok (@ruangteduh.id88).
@@ -154,7 +154,7 @@ if st.session_state.step == 3 and st.session_state.final_video_path:
             with st.chat_message("assistant"):
                 with st.spinner("Menganalisa perintah Kakak..."):
                     genai.configure(api_key=gemini_key)
-                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    model = genai.GenerativeModel('gemini-3.6-flash')
                     
                     prompt = f"""
                     Kamu adalah asisten editor video.
