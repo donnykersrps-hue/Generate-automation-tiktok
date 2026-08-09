@@ -8,7 +8,7 @@ st.set_page_config(page_title="AI TikTok Studio", layout="wide")
 st.title("🎬 AI-Powered TikTok Content Studio")
 st.markdown("Otomatiskan pembuatan konten dari teks ke video hanya dengan satu klik.")
 
-# Inisialisasi Session State (Agar data tidak hilang saat layar me-refresh)
+# Inisialisasi Session State
 if "step" not in st.session_state:
     st.session_state.step = 1
 if "voiceover_text" not in st.session_state:
@@ -53,15 +53,14 @@ if st.button("✨ Generate Naskah & Visual Plan"):
     else:
         with st.spinner("Meminta AI meracik naskah syahdu & 3 scene visual..."):
             genai.configure(api_key=gemini_key)
-            # Menggunakan model 'gemini-1.5-flash' yang stabil
-            model = genai.GenerativeModel('gemini-3.6-flash')
+            model = genai.GenerativeModel('gemini-1.5-flash')
             
             prompt = f"""
             Kamu adalah scriptwriter konten edukasi islami bertema ketenangan jiwa untuk TikTok (@ruangteduh.id88).
             Buatkan naskah video dengan TARGET DURASI PRESISI 60 Sampai 70 detik tentang topik: {topic}.
 
             Gunakan gaya bahasa puitis, syahdu, penuh empati, dan menyentuh batin.
-            Panjang teks VOICEOVER WAJIB berkisar antara 130 hingga 160 kata agar durasinya pas 60-70 detik.
+            Panjang teks VOICEOVER WAJIB berkisar antara 130 hingga 160 kata.
 
             Persyaratan Multi-Scene:
             Buatkan 3 KEYWORD Pexels berbeda dan 3 BAGIAN TEKS LAYAR yang akan tampil bergantian mengikuti 3 poin isi naskah.
@@ -89,6 +88,7 @@ if st.button("✨ Generate Naskah & Visual Plan"):
                 st.session_state.voiceover_text = vo
                 st.session_state.keywords_list = keywords
                 st.session_state.text_segments = segments
+                st.session_state.final_video_path = "" # Reset video lama
                 st.session_state.step = 2
                 st.success("Naskah Multi-Scene berhasil diracik!")
             except Exception as e:
@@ -104,33 +104,37 @@ if st.session_state.step >= 2:
             st.error("API Key Pexels belum diisi, Kak!")
         else:
             v_paths = []
-            for idx, kw in enumerate(st.session_state.keywords_list):
-                with st.spinner(f"Mencari video Pexels Scene {idx+1} ({kw})..."):
-                    p = get_pexels_video(kw, pexels_key, output_filename=f"temp_video_{idx}.mp4")
-                    v_paths.append(p)
+            st.write("⏳ **Memulai proses pengunduhan & perakitan video...**")
             
-            if any(v_paths):
+            for idx, kw in enumerate(st.session_state.keywords_list):
+                with st.spinner(f"Mencari & mengunduh video Pexels Scene {idx+1} ({kw})..."):
+                    p = get_pexels_video(kw, pexels_key, output_filename=f"temp_video_{idx}.mp4")
+                    if p:
+                        v_paths.append(p)
+            
+            if len(v_paths) > 0:
                 with st.spinner("Melakukan dubbing suara AI (Edge-TTS)..."):
                     aud_path = create_voiceover(st.session_state.voiceover_text)
                 
-                with st.spinner("Menggabungkan 3 Video, Audio, Subtitle Bergantian & Backsound Syahdu..."):
+                with st.spinner("Menggabungkan 3 Video, Audio, Subtitle Bergantian & Backsound Syahdu... (Proses ini butuh sekitar 15-30 detik)"):
                     final_path = assemble_video(
                         v_paths, 
                         aud_path, 
                         st.session_state.text_segments
                     )
                     
-                    if final_path:
+                    if final_path and os.path.exists(final_path):
                         st.session_state.final_video_path = final_path
                         st.session_state.step = 3
                         st.success("Render Multi-Scene Selesai!")
+                        st.rerun() # Refresh seketika untuk menampilkan video
                     else:
-                        st.error("Gagal saat proses perakitan video.")
+                        st.error("Gagal saat proses perakitan video MoviePy.")
             else:
-                st.error("Gagal mengunduh video Pexels.")
+                st.error("Gagal mengunduh video Pexels. Periksa koneksi atau Pexels API Key.")
 
-# --- 5. BAGIAN 3: VIEWPORT PREVIEW & AI ASSISTANT ---
-if st.session_state.step == 3 and st.session_state.final_video_path:
+# --- 5. BAGIAN 3: VIEWPORT PREVIEW ---
+if st.session_state.step == 3 and st.session_state.final_video_path and os.path.exists(st.session_state.final_video_path):
     st.markdown("---")
     st.header("📱 3. Viewport Preview & AI Assistant")
     
