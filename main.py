@@ -15,6 +15,8 @@ if "voiceover_text" not in st.session_state:
     st.session_state.voiceover_text = ""
 if "pexels_keyword" not in st.session_state:
     st.session_state.pexels_keyword = ""
+if "overlay_text" not in st.session_state:
+    st.session_state.overlay_text = ""
 if "final_video_path" not in st.session_state:
     st.session_state.final_video_path = ""
 if "chat_history" not in st.session_state:
@@ -49,9 +51,9 @@ if st.button("✨ Generate Naskah & Visual Plan"):
     elif not topic:
         st.warning("Topiknya diisi dulu dong, Kak.")
     else:
-        with st.spinner("Meminta AI meracik naskah..."):
+        with st.spinner("Meminta AI meracik naskah syahdu 60-70 detik..."):
             genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel('gemini-3.6-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash')
             
             prompt = f"""
             Kamu adalah scriptwriter konten edukasi islami bertema ketenangan jiwa untuk TikTok (@ruangteduh.id88).
@@ -73,14 +75,22 @@ if st.button("✨ Generate Naskah & Visual Plan"):
             KEYWORD: [1-2 kata kunci bahasa Inggris yang relevan untuk Pexels, contoh: galaxy earth, green nature, peaceful rain]
             OVERLAY_TEXT: [Kumpulan frasa pendek MAKSIMAL 3-5 KATA PER BARIS dipisah tanda garis miring (/), buat melipat rapat dan estetik di tengah layar]
             """
-            # Memecah respon Gemini untuk diambil Teks dan Keyword-nya
+            response = model.generate_content(prompt)
+            
+            # Memecah respon Gemini dengan aman untuk VOICEOVER, KEYWORD, dan OVERLAY_TEXT
             try:
-                vo = response.text.split("VOICEOVER:")[1].split("KEYWORD:")[0].strip()
-                kw = response.text.split("KEYWORD:")[1].strip()
+                raw_text = response.text
+                vo = raw_text.split("VOICEOVER:")[1].split("KEYWORD:")[0].strip()
+                kw = raw_text.split("KEYWORD:")[1].split("OVERLAY_TEXT:")[0].strip()
+                overlay = raw_text.split("OVERLAY_TEXT:")[1].strip()
+                
+                # Ubah tanda garis miring (/) di OVERLAY_TEXT menjadi baris baru
+                formatted_overlay = overlay.replace(" / ", "\n").replace("/", "\n")
                 
                 # Simpan ke memori aplikasi
                 st.session_state.voiceover_text = vo
                 st.session_state.pexels_keyword = kw
+                st.session_state.overlay_text = formatted_overlay
                 st.session_state.step = 2
                 st.success("Naskah dan konsep visual berhasil dibuat!")
             except Exception as e:
@@ -88,7 +98,7 @@ if st.button("✨ Generate Naskah & Visual Plan"):
 
 # --- 4. BAGIAN 2: PREVIEW NASKAH & RENDERING ---
 if st.session_state.step >= 2:
-    st.info(f"**Narasi (TTS):** {st.session_state.voiceover_text}\n\n**Video Pencarian (Pexels):** {st.session_state.pexels_keyword}")
+    st.info(f"**Narasi (TTS):** {st.session_state.voiceover_text}\n\n**Video Pencarian (Pexels):** {st.session_state.pexels_keyword}\n\n**Teks Layar (Overlay):**\n{st.session_state.overlay_text}")
 
     st.header("⚙️ 2. Proses Render Video")
     if st.button("🚀 Mulai Render Otomatis"):
@@ -102,8 +112,10 @@ if st.session_state.step >= 2:
                 with st.spinner("Melakukan dubbing suara AI (Edge-TTS)..."):
                     aud_path = create_voiceover(st.session_state.voiceover_text)
                 
-                with st.spinner("Menggabungkan Video, Audio & Subtitle... (Ini butuh beberapa detik)"):
-                    final_path = assemble_video(vid_path, aud_path, st.session_state.voiceover_text)
+                with st.spinner("Menggabungkan Video, Audio & Subtitle Estetik..."):
+                    # Gunakan overlay_text untuk tampilan teks layar melipat
+                    text_to_render = st.session_state.overlay_text if st.session_state.overlay_text else st.session_state.voiceover_text
+                    final_path = assemble_video(vid_path, aud_path, text_to_render)
                     
                     if final_path:
                         st.session_state.final_video_path = final_path
@@ -119,7 +131,6 @@ if st.session_state.step == 3 and st.session_state.final_video_path:
     st.markdown("---")
     st.header("📱 3. Viewport Preview & AI Assistant")
     
-    # Membagi layar jadi 2 kolom: Kiri (Video), Kanan (Chat)
     col1, col2 = st.columns([1, 1])
     
     with col1:
@@ -129,14 +140,12 @@ if st.session_state.step == 3 and st.session_state.final_video_path:
             
     with col2:
         st.subheader("💬 Ngobrol dengan AI Editor")
-        st.caption("Minta revisi visual atau teks di sini (contoh: 'Gem, ganti videonya jadi mobil sport').")
+        st.caption("Minta revisi visual atau teks di sini.")
         
-        # Tampilkan riwayat chat
         for msg in st.session_state.chat_history:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
         
-        # Input chat dari Kak Donny
         if user_input := st.chat_input("Tulis revisi di sini..."):
             st.session_state.chat_history.append({"role": "user", "content": user_input})
             with st.chat_message("user"):
@@ -145,20 +154,20 @@ if st.session_state.step == 3 and st.session_state.final_video_path:
             with st.chat_message("assistant"):
                 with st.spinner("Menganalisa perintah Kakak..."):
                     genai.configure(api_key=gemini_key)
-                    model = genai.GenerativeModel('gemini-3.6-flash')
+                    model = genai.GenerativeModel('gemini-2.5-flash')
                     
-                    # AI diberi "Konteks" tentang video saat ini agar dia paham apa yang sedang diedit
                     prompt = f"""
                     Kamu adalah asisten editor video.
-                    Saat ini user memiliki naskah: "{st.session_state.voiceover_text}"
-                    Dan visual video dicari menggunakan keyword: "{st.session_state.pexels_keyword}"
+                    Saat ini user memiliki naskah narasi: "{st.session_state.voiceover_text}"
+                    Visual video dicari menggunakan keyword: "{st.session_state.pexels_keyword}"
+                    Teks layar: "{st.session_state.overlay_text}"
                     
                     User meminta revisi: "{user_input}"
                     
-                    Jika user minta ubah visual, ganti keywordnya. Jika minta ubah teks, ganti naskahnya.
                     Berikan output dengan format persis ini:
                     UPDATE_VOICEOVER: [teks narasi (baru/lama)]
                     UPDATE_KEYWORD: [keyword pexels bahasa inggris (baru/lama)]
+                    UPDATE_OVERLAY: [teks layar pendek dipisah tanda garis miring (/) (baru/lama)]
                     PESAN: [Respon ramah ke user bahwa kamu sudah memperbaruinya]
                     """
                     
@@ -166,18 +175,19 @@ if st.session_state.step == 3 and st.session_state.final_video_path:
                     try:
                         pesan = response.text.split("PESAN:")[1].strip()
                         new_vo = response.text.split("UPDATE_VOICEOVER:")[1].split("UPDATE_KEYWORD:")[0].strip()
-                        new_kw = response.text.split("UPDATE_KEYWORD:")[1].split("PESAN:")[0].strip()
+                        new_kw = response.text.split("UPDATE_KEYWORD:")[1].split("UPDATE_OVERLAY:")[0].strip()
+                        new_ov = response.text.split("UPDATE_OVERLAY:")[1].split("PESAN:")[0].strip()
                         
                         st.markdown(pesan)
                         st.session_state.chat_history.append({"role": "assistant", "content": pesan})
                         
-                        # Jika ada perubahan parameter, update session_state dan refresh layar
-                        if new_vo != st.session_state.voiceover_text or new_kw != st.session_state.pexels_keyword:
+                        if new_vo != st.session_state.voiceover_text or new_kw != st.session_state.pexels_keyword or new_ov != st.session_state.overlay_text:
                             st.session_state.voiceover_text = new_vo
                             st.session_state.pexels_keyword = new_kw
-                            st.info("🔄 Parameter naskah/visual telah diperbarui! Silakan klik 'Mulai Render Otomatis' lagi untuk menerapkan perubahan.")
-                            st.session_state.step = 2 # Mundurkan step agar tombol render muncul
-                            st.rerun() # Refresh Streamlit seketika
+                            st.session_state.overlay_text = new_ov.replace(" / ", "\n").replace("/", "\n")
+                            st.info("🔄 Parameter naskah/visual telah diperbarui! Silakan klik 'Mulai Render Otomatis' lagi.")
+                            st.session_state.step = 2
+                            st.rerun()
                             
                     except Exception as e:
                         st.markdown("Maaf Kak, format revisinya kurang jelas. Boleh diperjelas lagi?")
