@@ -4,8 +4,25 @@ import asyncio
 import edge_tts
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
+
+# Atur environment untuk imageio-ffmpeg (agar menggunakan ffmpeg dari sistem)
+os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
+
+# Import moviepy
 from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip
-from moviepy.video.fx.all import loop   # <-- IMPORT DITAMBAHKAN
+
+# ================== IMPORT LOOP DENGAN FALLBACK ==================
+try:
+    # Moviepy 1.x
+    from moviepy.video.fx.all import loop
+except ImportError:
+    try:
+        # Moviepy 2.x (beberapa versi)
+        from moviepy.video.fx.loop import loop
+    except ImportError:
+        # Fallback terakhir: coba dari moviepy.video.fx
+        from moviepy.video.fx import loop as loop_module
+        loop = loop_module.loop
 
 # ================== 1. FETCH VIDEO DARI PEXELS ==================
 def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
@@ -36,7 +53,7 @@ def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
         with open(output_filename, "wb") as f:
             f.write(video_data)
         
-        return output_filename   # <-- RETURN DITAMBAHKAN
+        return output_filename
     
     except Exception as e:
         print(f"Error Pexels: {e}")
@@ -104,7 +121,7 @@ def assemble_video(video_path, audio_path, text_overlay, output_path="final_tikt
         audio_clip = AudioFileClip(audio_path)
         
         if video_clip.duration < audio_clip.duration:
-            video_clip = loop(video_clip, duration=audio_clip.duration)   # <-- loop sekarang terdefinisi
+            video_clip = loop(video_clip, duration=audio_clip.duration)
         else:
             video_clip = video_clip.subclip(0, audio_clip.duration)
         
