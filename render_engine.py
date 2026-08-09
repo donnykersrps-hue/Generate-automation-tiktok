@@ -209,7 +209,7 @@ def assemble_video(video_path, audio_path, text_overlay, output_path="final_tikt
         # MoviePy 2.x tidak menerima parameter transparent/ismask
         text_clip = ImageClip(np.array(text_img))
         # Gunakan safe_set_duration agar kompatibel 1.x dan 2.x
-        text_clip = safe_set_duration(text_clip, video_clip.duration)
+        text_clip = text_clip.with_duration(video_clip.duration)
 
         # Gabungkan video dan teks, lalu set audio (pakai safe_set_audio jika perlu)
         final_clip = CompositeVideoClip([video_clip, text_clip])
