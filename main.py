@@ -8,7 +8,7 @@ st.set_page_config(page_title="AI TikTok Studio", layout="wide")
 st.title("🎬 AI-Powered TikTok Content Studio")
 st.markdown("Otomatiskan pembuatan konten dari teks ke video hanya dengan satu klik.")
 
-# Inisialisasi Session State
+# Inisialisasi Session State (Agar data tidak hilang saat layar me-refresh)
 if "step" not in st.session_state:
     st.session_state.step = 1
 if "voiceover_text" not in st.session_state:
@@ -53,14 +53,15 @@ if st.button("✨ Generate Naskah & Visual Plan"):
     else:
         with st.spinner("Meminta AI meracik naskah syahdu & 3 scene visual..."):
             genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            # Menggunakan model 'gemini-1.5-flash' yang stabil
+            model = genai.GenerativeModel('gemini-3.6-flash')
             
             prompt = f"""
             Kamu adalah scriptwriter konten edukasi islami bertema ketenangan jiwa untuk TikTok (@ruangteduh.id88).
             Buatkan naskah video dengan TARGET DURASI PRESISI 60 Sampai 70 detik tentang topik: {topic}.
 
             Gunakan gaya bahasa puitis, syahdu, penuh empati, dan menyentuh batin.
-            Panjang teks VOICEOVER WAJIB berkisar antara 130 hingga 160 kata.
+            Panjang teks VOICEOVER WAJIB berkisar antara 130 hingga 160 kata agar durasinya pas 60-70 detik.
 
             Persyaratan Multi-Scene:
             Buatkan 3 KEYWORD Pexels berbeda dan 3 BAGIAN TEKS LAYAR yang akan tampil bergantian mengikuti 3 poin isi naskah.
@@ -128,7 +129,7 @@ if st.session_state.step >= 2:
             else:
                 st.error("Gagal mengunduh video Pexels.")
 
-# --- 5. BAGIAN 3: VIEWPORT PREVIEW ---
+# --- 5. BAGIAN 3: VIEWPORT PREVIEW & AI ASSISTANT ---
 if st.session_state.step == 3 and st.session_state.final_video_path:
     st.markdown("---")
     st.header("📱 3. Viewport Preview & AI Assistant")
