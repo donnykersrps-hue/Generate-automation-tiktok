@@ -2,14 +2,14 @@ import os
 import requests
 import asyncio
 import edge_tts
-from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-
-# Atur environment untuk imageio-ffmpeg (agar menggunakan ffmpeg dari sistem)
-os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
-
-# Import moviepy
+from PIL import Image, ImageDraw, ImageFont
 from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip
+
+# ================== SET ENVIRONMENT UNTUK FFMPEG (Cloud) ==================
+# Jika di Streamlit Cloud, pastikan ffmpeg terinstall via packages.txt
+# dan arahkan imageio-ffmpeg ke binary sistem
+os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
 
 # ================== IMPORT LOOP DENGAN FALLBACK ==================
 try:
@@ -20,13 +20,25 @@ except ImportError:
         # Moviepy 2.x (beberapa versi)
         from moviepy.video.fx.loop import loop
     except ImportError:
-        # Fallback terakhir: coba dari moviepy.video.fx
-        from moviepy.video.fx import loop as loop_module
-        loop = loop_module.loop
+        # Fallback manual: definisikan sendiri fungsi loop sederhana
+        def loop(clip, duration=None):
+            """Mengulang clip hingga mencapai durasi yang diinginkan."""
+            if duration is None:
+                duration = clip.duration
+            if clip.duration >= duration:
+                return clip.subclip(0, duration)
+            # Hitung berapa kali pengulangan
+            n = int(duration / clip.duration) + 1
+            clips = [clip] * n
+            from moviepy import concatenate_videoclips
+            return concatenate_videoclips(clips).subclip(0, duration)
 
 # ================== 1. FETCH VIDEO DARI PEXELS ==================
 def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
-    """Mencari dan mengunduh video vertikal (portrait) dari Pexels."""
+    """
+    Mencari dan mengunduh video vertikal (portrait) dari Pexels.
+    Mengembalikan path file video atau None jika gagal.
+    """
     url = f"https://api.pexels.com/videos/search?query={keyword}&per_page=1&orientation=portrait"
     headers = {"Authorization": api_key}
     
@@ -120,20 +132,24 @@ def assemble_video(video_path, audio_path, text_overlay, output_path="final_tikt
         video_clip = VideoFileClip(video_path)
         audio_clip = AudioFileClip(audio_path)
         
+        # Sesuaikan durasi video dengan audio
         if video_clip.duration < audio_clip.duration:
             video_clip = loop(video_clip, duration=audio_clip.duration)
         else:
             video_clip = video_clip.subclip(0, audio_clip.duration)
         
+        # Resize dan crop ke resolusi yang diinginkan
         video_clip = video_clip.resize(height=resolution[1])
         if video_clip.w > resolution[0]:
             x_center = video_clip.w // 2
             video_clip = video_clip.crop(x_center - resolution[0]//2, 0, x_center + resolution[0]//2, resolution[1])
         
+        # Buat teks overlay
         text_img = create_text_image(text_overlay, size=resolution, font_size=65, color='white', stroke_color='black', stroke_width=4)
         text_clip = ImageClip(np.array(text_img), transparent=True, ismask=False)
         text_clip = text_clip.set_duration(video_clip.duration)
         
+        # Gabungkan video dan teks
         final_clip = CompositeVideoClip([video_clip, text_clip]).set_audio(audio_clip)
         final_clip.write_videofile(
             output_path,
@@ -145,6 +161,7 @@ def assemble_video(video_path, audio_path, text_overlay, output_path="final_tikt
             ffmpeg_params=["-crf", "23"]
         )
         
+        # Tutup clip untuk membebaskan memory
         video_clip.close()
         audio_clip.close()
         final_clip.close()
