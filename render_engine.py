@@ -9,20 +9,76 @@ from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip,
 # ================== SET FFMPEG UNTUK CLOUD ==================
 os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
 
-# ================== FUNGSI SUBKLIP AMAN (UNTUK VERSI MOVIEPY) ==================
+# ================== WRAPPER FUNCTIONS UNTUK KOMPATIBILITAS MOVIEPY ==================
+
 def safe_subclip(clip, start, end):
     """Memotong clip dengan aman, mendukung moviepy 1.x dan 2.x."""
     try:
+        # Moviepy 1.x
         return clip.subclip(start, end)
     except AttributeError:
-        if hasattr(clip, 'subclipped'):
+        try:
+            # Moviepy 2.x (beberapa versi)
             return clip.subclipped(start, end)
-        else:
-            # Fallback manual: buat clip baru dengan durasi
+        except AttributeError:
+            # Fallback manual: gunakan with_start dan with_duration
             return clip.with_start(start).with_duration(end - start)
+
+def safe_resize(clip, newsize=None, height=None, width=None):
+    """
+    Mengubah ukuran clip dengan aman.
+    Parameter: newsize=(width, height) atau height=..., width=...
+    """
+    if newsize is None:
+        # Hitung proporsi jika hanya height atau width yang diberikan
+        if height is not None and width is None:
+            # Pertahankan aspek rasio
+            aspect = clip.w / clip.h
+            width = int(height * aspect)
+            newsize = (width, height)
+        elif width is not None and height is None:
+            aspect = clip.w / clip.h
+            height = int(width / aspect)
+            newsize = (width, height)
+        else:
+            raise ValueError("Harus menentukan newsize atau height/width")
+    try:
+        # Moviepy 1.x
+        return clip.resize(newsize)
+    except AttributeError:
+        try:
+            # Moviepy 2.x
+            return clip.resized(newsize)
+        except AttributeError:
+            # Fallback: gunakan transformasi skala manual (jarang diperlukan)
+            raise NotImplementedError("Tidak ada metode resize/resized yang tersedia")
+
+def safe_crop(clip, x1=None, y1=None, x2=None, y2=None, x_center=None, y_center=None, width=None, height=None):
+    """Memotong clip dengan aman."""
+    try:
+        # Moviepy 1.x
+        if all(v is not None for v in [x1, y1, x2, y2]):
+            return clip.crop(x1, y1, x2, y2)
+        elif x_center is not None and y_center is not None and width is not None and height is not None:
+            return clip.crop(x_center=x_center, y_center=y_center, width=width, height=height)
+        else:
+            raise ValueError("Parameter crop tidak lengkap")
+    except AttributeError:
+        try:
+            # Moviepy 2.x
+            if all(v is not None for v in [x1, y1, x2, y2]):
+                return clip.cropped(x1, y1, x2, y2)
+            elif x_center is not None and y_center is not None and width is not None and height is not None:
+                return clip.cropped(x_center=x_center, y_center=y_center, width=width, height=height)
+            else:
+                raise ValueError("Parameter crop tidak lengkap")
+        except AttributeError:
+            # Fallback: tidak ada metode crop, kita gunakan resize dengan mempertahankan aspek
+            raise NotImplementedError("Tidak ada metode crop/cropped yang tersedia")
 
 # ================== FUNGSI LOOP MANUAL ==================
 def repeat_clip(clip, target_duration):
+    """Mengulang clip hingga mencapai durasi tertentu."""
     if clip.duration >= target_duration:
         return safe_subclip(clip, 0, target_duration)
     repetitions = int(target_duration / clip.duration) + 1
@@ -118,17 +174,15 @@ def create_text_image(text, size=(1080, 1920), font_size=65, color='white', stro
         y += line_heights[idx] + 5
     return img
 
-# ================== 4. RENDER VIDEO UTAMA (DENGAN VALIDASI FILE) ==================
+# ================== 4. RENDER VIDEO UTAMA (DENGAN VALIDASI DAN WRAPPER) ==================
 def assemble_video(video_path, audio_path, text_overlay, output_path="final_tiktok.mp4", resolution=(1080, 1920)):
-    # ===== VALIDASI AWAL: PASTIKAN FILE VIDEO & AUDIO ADA =====
+    # VALIDASI FILE
     if not os.path.exists(video_path):
         print(f"File video tidak ditemukan: {video_path}")
         return None
     if not os.path.exists(audio_path):
         print(f"File audio tidak ditemukan: {audio_path}")
         return None
-    
-    # Cek ukuran file (minimal 1 KB) agar tidak kosong
     if os.path.getsize(video_path) < 1024:
         print(f"File video terlalu kecil (mungkin corrupt): {video_path}")
         return None
@@ -149,11 +203,19 @@ def assemble_video(video_path, audio_path, text_overlay, output_path="final_tikt
         else:
             video_clip = safe_subclip(video_clip, 0, audio_clip.duration)
 
-        # Resize dan crop
-        video_clip = video_clip.resize(height=resolution[1])
+        # Resize dan crop ke resolusi yang diinginkan
+        # Pertama resize dengan menjaga aspek rasio berdasarkan tinggi
+        video_clip = safe_resize(video_clip, height=resolution[1])
+        # Jika lebar hasil lebih besar dari target, crop dari tengah
         if video_clip.w > resolution[0]:
-            x_center = video_clip.w // 2
-            video_clip = video_clip.crop(x_center - resolution[0]//2, 0, x_center + resolution[0]//2, resolution[1])
+            # Crop dari tengah dengan lebar target
+            video_clip = safe_crop(
+                video_clip,
+                x_center=video_clip.w / 2,
+                y_center=video_clip.h / 2,
+                width=resolution[0],
+                height=resolution[1]
+            )
 
         # Buat teks overlay
         text_img = create_text_image(text_overlay, size=resolution)
