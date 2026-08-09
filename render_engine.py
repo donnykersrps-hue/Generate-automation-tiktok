@@ -5,6 +5,7 @@ import edge_tts
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip
+from moviepy.video.fx.all import loop   # <-- IMPORT DITAMBAHKAN
 
 # ================== 1. FETCH VIDEO DARI PEXELS ==================
 def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
@@ -12,38 +13,40 @@ def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
     url = f"https://api.pexels.com/videos/search?query={keyword}&per_page=1&orientation=portrait"
     headers = {"Authorization": api_key}
     
-try:
-    response = requests.get(url, headers=headers).json()
-    
-    videos = response.get("videos", [])
-    if not videos:
-        print("Video Pexels tidak ditemukan!")
-        return None
-    
-    video_files = videos[0].get("video_files", [])
-    if not video_files:
-        print("Tidak ada file video dalam respons Pexels!")
-        return None
-    
-    # Pilih video dengan lebar >= 720, jika ada; jika tidak, ambil yang pertama
-    video_url = next(
-        (v["link"] for v in video_files if v.get("width", 0) >= 720),
-        video_files[0]["link"]
-    )
-    
-    video_data = requests.get(video_url).content
-    with open(output_filename, "wb") as f:
-        f.write(video_data)
+    try:
+        response = requests.get(url, headers=headers).json()
+        
+        videos = response.get("videos", [])
+        if not videos:
+            print("Video Pexels tidak ditemukan!")
+            return None
+        
+        video_files = videos[0].get("video_files", [])
+        if not video_files:
+            print("Tidak ada file video dalam respons Pexels!")
+            return None
+        
+        # Pilih video dengan lebar >= 720, jika ada; jika tidak, ambil yang pertama
+        video_url = next(
+            (v["link"] for v in video_files if v.get("width", 0) >= 720),
+            video_files[0]["link"]
+        )
+        
+        video_data = requests.get(video_url).content
+        with open(output_filename, "wb") as f:
+            f.write(video_data)
+        
+        return output_filename   # <-- RETURN DITAMBAHKAN
     
     except Exception as e:
         print(f"Error Pexels: {e}")
         return None
+
 # ================== 2. TEXT-TO-SPEECH (Edge-TTS) ==================
 async def generate_tts(text, output_filename="temp_audio.mp3"):
     voice = "id-ID-ArdiNeural"
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_filename)
-
 
 def create_voiceover(text, output_filename="temp_audio.mp3"):
     asyncio.run(generate_tts(text, output_filename))
@@ -101,7 +104,7 @@ def assemble_video(video_path, audio_path, text_overlay, output_path="final_tikt
         audio_clip = AudioFileClip(audio_path)
         
         if video_clip.duration < audio_clip.duration:
-            video_clip = loop(video_clip, duration=audio_clip.duration)
+            video_clip = loop(video_clip, duration=audio_clip.duration)   # <-- loop sekarang terdefinisi
         else:
             video_clip = video_clip.subclip(0, audio_clip.duration)
         
