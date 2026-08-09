@@ -14,21 +14,15 @@ os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
 def safe_subclip(clip, start, end):
     """Memotong clip dengan aman, mendukung moviepy 1.x dan 2.x."""
     try:
-        # Moviepy 1.x
         return clip.subclip(start, end)
     except AttributeError:
         try:
-            # Moviepy 2.x (beberapa versi)
             return clip.subclipped(start, end)
         except AttributeError:
-            # Fallback manual
             return clip.with_start(start).with_duration(end - start)
 
 def safe_resize(clip, newsize=None, height=None, width=None):
-    """
-    Mengubah ukuran clip dengan aman.
-    Parameter: newsize=(width, height) atau height=..., width=...
-    """
+    """Mengubah ukuran clip dengan aman."""
     if newsize is None:
         if height is not None and width is None:
             aspect = clip.w / clip.h
@@ -49,7 +43,7 @@ def safe_resize(clip, newsize=None, height=None, width=None):
             raise NotImplementedError("Tidak ada metode resize/resized yang tersedia")
 
 def safe_crop(clip, x1=None, y1=None, x2=None, y2=None, x_center=None, y_center=None, width=None, height=None):
-    """Memotong clip dengan aman."""
+    """Memotong area clip dengan aman."""
     try:
         if all(v is not None for v in [x1, y1, x2, y2]):
             return clip.crop(x1, y1, x2, y2)
@@ -129,7 +123,7 @@ def create_text_image(text, size=(1080, 1920), font_size=65, color='white', stro
             try:
                 font = ImageFont.truetype(path, font_size)
                 break
-            except:
+            except Exception:
                 continue
     if font is None:
         font = ImageFont.load_default()
@@ -168,18 +162,11 @@ def create_text_image(text, size=(1080, 1920), font_size=65, color='white', stro
 
 # ================== 4. RENDER VIDEO UTAMA ==================
 def assemble_video(video_path, audio_path, text_overlay, output_path="final_tiktok.mp4", resolution=(1080, 1920)):
-    # VALIDASI FILE
-    if not os.path.exists(video_path):
-        print(f"File video tidak ditemukan: {video_path}")
+    if not os.path.exists(video_path) or not os.path.exists(audio_path):
+        print("File video atau audio tidak ditemukan!")
         return None
-    if not os.path.exists(audio_path):
-        print(f"File audio tidak ditemukan: {audio_path}")
-        return None
-    if os.path.getsize(video_path) < 1024:
-        print(f"File video terlalu kecil (mungkin corrupt): {video_path}")
-        return None
-    if os.path.getsize(audio_path) < 1024:
-        print(f"File audio terlalu kecil (mungkin corrupt): {audio_path}")
+    if os.path.getsize(video_path) < 1024 or os.path.getsize(audio_path) < 1024:
+        print("File terunduh kosong atau rusak!")
         return None
 
     try:
@@ -189,13 +176,11 @@ def assemble_video(video_path, audio_path, text_overlay, output_path="final_tikt
         video_clip = VideoFileClip(video_path)
         audio_clip = AudioFileClip(audio_path)
 
-        # Sesuaikan durasi video dengan audio
         if video_clip.duration < audio_clip.duration:
             video_clip = repeat_clip(video_clip, audio_clip.duration)
         else:
             video_clip = safe_subclip(video_clip, 0, audio_clip.duration)
 
-        # Resize dan crop
         video_clip = safe_resize(video_clip, height=resolution[1])
         if video_clip.w > resolution[0]:
             video_clip = safe_crop(
@@ -206,12 +191,11 @@ def assemble_video(video_path, audio_path, text_overlay, output_path="final_tikt
                 height=resolution[1]
             )
 
-        # Buat teks overlay
         text_img = create_text_image(text_overlay, size=resolution)
-        text_clip = ImageClip(np.array(text_img), transparent=True, ismask=False)
+        # PERBAIKAN PENTING: Dihapus parameter transparent=True & ismask=False agar cocok dengan MoviePy 2.x
+        text_clip = ImageClip(np.array(text_img))
         text_clip = text_clip.set_duration(video_clip.duration)
 
-        # Gabungkan
         final_clip = CompositeVideoClip([video_clip, text_clip]).set_audio(audio_clip)
         final_clip.write_videofile(
             output_path,
