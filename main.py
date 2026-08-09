@@ -53,16 +53,26 @@ if st.button("✨ Generate Naskah & Visual Plan"):
             genai.configure(api_key=gemini_key)
             model = genai.GenerativeModel('gemini-3.6-flash')
             
-            # Prompt yang dikunci formatnya agar mudah dibaca oleh Python
             prompt = f"""
-            Buatkan rancangan 1 scene video TikTok tentang: {topic}.
-            Durasi narasi sekitar 15-20 detik.
-            Berikan format jawaban persis seperti ini (tanpa awalan/akhiran lain):
-            VOICEOVER: [Teks narasi bahasa Indonesia yang menarik dan natural]
-            KEYWORD: [1-2 kata kunci bahasa Inggris yang relevan untuk cari footage di Pexels]
+            Kamu adalah scriptwriter konten edukasi islami bertema ketenangan jiwa untuk TikTok (@ruangteduh.id88).
+            Buatkan naskah video dengan TARGET DURASI PRESISI 60 Sampai 70 detik tentang topik: {topic}.
+
+            Gunakan gaya bahasa puitis, syahdu, penuh empati, dan menyentuh batin. Tempo pembacaan dirancang tenang dan perlahan.
+            Panjang teks VOICEOVER WAJIB berkisar antara 130 hingga 160 kata agar durasinya pas 60-70 detik saat diucapkan.
+
+            Persyaratan Struktur Konten:
+            1. HOOK (00:00 - 00:08): Kalimat pembuka yang menghentikan scroll penonton.
+            2. ISI KONTEN (3 POIN):
+               - Poin Pertama + Cantumkan Dalil/Hadits Sahihnya.
+               - Poin Kedua + Cantumkan Dalil/Hadits Sahihnya.
+               - Poin Ketiga + Cantumkan Dalil/Hadits Sahihnya.
+            3. PENUTUP / CTA (00:50 - 00:70): Pesan hangat penenang hati dan ajakan bertindak (save/amalkan).
+
+            Berikan format jawaban PERSIS seperti ini (tanpa awalan/akhiran lain):
+            VOICEOVER: [Teks narasi lengkap bahasa Indonesia 130-160 kata yang dibaca penuh penjiwaan, sertakan bacaan nomor haditsnya secara lisan]
+            KEYWORD: [1-2 kata kunci bahasa Inggris yang relevan untuk Pexels, contoh: galaxy earth, green nature, peaceful rain]
+            OVERLAY_TEXT: [Kumpulan frasa pendek MAKSIMAL 3-5 KATA PER BARIS dipisah tanda garis miring (/), buat melipat rapat dan estetik di tengah layar]
             """
-            response = model.generate_content(prompt)
-            
             # Memecah respon Gemini untuk diambil Teks dan Keyword-nya
             try:
                 vo = response.text.split("VOICEOVER:")[1].split("KEYWORD:")[0].strip()
