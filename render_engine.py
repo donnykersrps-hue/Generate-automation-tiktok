@@ -10,19 +10,20 @@ from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip,
 os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
 
 # ================== WRAPPER FUNCTIONS UNTUK KOMPATIBILITAS MOVIEPY ==================
+# Semua wrapper mengutamakan metode MoviePy 2.x, lalu fallback ke 1.x.
 
 def safe_subclip(clip, start, end):
-    """Memotong clip dengan aman, mendukung moviepy 1.x dan 2.x."""
+    """Memotong clip dengan aman: prioritas subclipped → subclip → manual."""
     try:
-        return clip.subclip(start, end)
+        return clip.subclipped(start, end)      # MoviePy 2.x
     except AttributeError:
         try:
-            return clip.subclipped(start, end)
+            return clip.subclip(start, end)     # MoviePy 1.x
         except AttributeError:
-            return clip.with_start(start).with_duration(end - start)
+            return clip.with_start(start).with_duration(end - start)  # fallback
 
 def safe_resize(clip, newsize=None, height=None, width=None):
-    """Mengubah ukuran clip dengan aman."""
+    """Mengubah ukuran clip: prioritas resized → resize."""
     if newsize is None:
         if height is not None and width is None:
             aspect = clip.w / clip.h
@@ -35,65 +36,55 @@ def safe_resize(clip, newsize=None, height=None, width=None):
         else:
             raise ValueError("Harus menentukan newsize atau height/width")
     try:
-        return clip.resize(newsize)
+        return clip.resized(newsize)            # MoviePy 2.x
     except AttributeError:
-        try:
-            return clip.resized(newsize)
-        except AttributeError:
-            raise NotImplementedError("Tidak ada metode resize/resized yang tersedia")
+        return clip.resize(newsize)             # MoviePy 1.x
 
 def safe_crop(clip, x1=None, y1=None, x2=None, y2=None, x_center=None, y_center=None, width=None, height=None):
-    """Memotong area clip dengan aman."""
+    """Memotong clip: prioritas cropped → crop."""
     try:
+        if all(v is not None for v in [x1, y1, x2, y2]):
+            return clip.cropped(x1, y1, x2, y2)   # MoviePy 2.x
+        elif x_center is not None and y_center is not None and width is not None and height is not None:
+            return clip.cropped(x_center=x_center, y_center=y_center, width=width, height=height)
+        else:
+            raise ValueError("Parameter crop tidak lengkap")
+    except AttributeError:
+        # Fallback MoviePy 1.x
         if all(v is not None for v in [x1, y1, x2, y2]):
             return clip.crop(x1, y1, x2, y2)
         elif x_center is not None and y_center is not None and width is not None and height is not None:
             return clip.crop(x_center=x_center, y_center=y_center, width=width, height=height)
         else:
             raise ValueError("Parameter crop tidak lengkap")
-    except AttributeError:
-        try:
-            if all(v is not None for v in [x1, y1, x2, y2]):
-                return clip.cropped(x1, y1, x2, y2)
-            elif x_center is not None and y_center is not None and width is not None and height is not None:
-                return clip.cropped(x_center=x_center, y_center=y_center, width=width, height=height)
-            else:
-                raise ValueError("Parameter crop tidak lengkap")
-        except AttributeError:
-            raise NotImplementedError("Tidak ada metode crop/cropped yang tersedia")
 
 def safe_set_duration(clip, duration):
-    """Mengatur durasi clip dengan aman (set_duration atau with_duration)."""
+    """Mengatur durasi clip: prioritas with_duration → set_duration."""
     try:
-        return clip.set_duration(duration)
+        return clip.with_duration(duration)     # MoviePy 2.x
     except AttributeError:
-        return clip.with_duration(duration)
+        return clip.set_duration(duration)      # MoviePy 1.x
 
 def safe_set_audio(clip, audio_clip):
-    """Mengatur audio clip dengan aman (set_audio atau with_audio)."""
+    """Mengatur audio clip: prioritas with_audio → set_audio."""
     try:
-        return clip.set_audio(audio_clip)
+        return clip.with_audio(audio_clip)      # MoviePy 2.x
     except AttributeError:
-        return clip.with_audio(audio_clip)
+        return clip.set_audio(audio_clip)       # MoviePy 1.x
 
 def safe_write_videofile(clip, *args, **kwargs):
     """
-    Menulis video dengan aman, mendukung moviepy 1.x dan 2.x.
-    Jika parameter verbose atau logger tidak dikenali (MoviePy 2.x), panggil ulang tanpa keduanya.
+    Menulis video: coba dengan semua parameter, jika error karena verbose/logger,
+    hapus kedua parameter lalu coba lagi.
     """
     try:
-        # Coba panggil dengan semua parameter
         return clip.write_videofile(*args, **kwargs)
     except TypeError as e:
-        # Jika error karena unexpected keyword argument (verbose/logger)
         if "verbose" in str(e) or "logger" in str(e):
-            # Hapus verbose dan logger dari kwargs
             kwargs.pop("verbose", None)
             kwargs.pop("logger", None)
-            # Panggil ulang tanpa kedua parameter
             return clip.write_videofile(*args, **kwargs)
         else:
-            # Lempar ulang jika error lain
             raise
 
 # ================== FUNGSI LOOP MANUAL ==================
@@ -210,11 +201,13 @@ def assemble_video(video_path, audio_path, text_overlay, output_path="final_tikt
         video_clip = VideoFileClip(video_path)
         audio_clip = AudioFileClip(audio_path)
 
+        # Sesuaikan durasi
         if video_clip.duration < audio_clip.duration:
             video_clip = repeat_clip(video_clip, audio_clip.duration)
         else:
             video_clip = safe_subclip(video_clip, 0, audio_clip.duration)
 
+        # Resize dan crop
         video_clip = safe_resize(video_clip, height=resolution[1])
         if video_clip.w > resolution[0]:
             video_clip = safe_crop(
@@ -225,17 +218,16 @@ def assemble_video(video_path, audio_path, text_overlay, output_path="final_tikt
                 height=resolution[1]
             )
 
+        # Buat teks overlay
         text_img = create_text_image(text_overlay, size=resolution)
-        # MoviePy 2.x tidak menerima parameter transparent/ismask
         text_clip = ImageClip(np.array(text_img))
-        # Gunakan safe_set_duration agar kompatibel 1.x dan 2.x
         text_clip = safe_set_duration(text_clip, video_clip.duration)
 
-        # Gabungkan video dan teks, lalu set audio (pakai safe_set_audio)
+        # Gabungkan
         final_clip = CompositeVideoClip([video_clip, text_clip])
         final_clip = safe_set_audio(final_clip, audio_clip)
 
-        # Gunakan safe_write_videofile untuk menangani perbedaan parameter verbose/logger
+        # Tulis video dengan wrapper aman
         safe_write_videofile(
             final_clip,
             output_path,
