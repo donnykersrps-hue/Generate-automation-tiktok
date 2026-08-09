@@ -4,34 +4,20 @@ import asyncio
 import edge_tts
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip
+from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
 
 # ================== SET ENVIRONMENT UNTUK FFMPEG (Cloud) ==================
-# Jika di Streamlit Cloud, pastikan ffmpeg terinstall via packages.txt
-# dan arahkan imageio-ffmpeg ke binary sistem
 os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
 
-# ================== IMPORT LOOP DENGAN FALLBACK ==================
-try:
-    # Moviepy 1.x
-    from moviepy.video.fx.all import loop
-except ImportError:
-    try:
-        # Moviepy 2.x (beberapa versi)
-        from moviepy.video.fx.loop import loop
-    except ImportError:
-        # Fallback manual: definisikan sendiri fungsi loop sederhana
-        def loop(clip, duration=None):
-            """Mengulang clip hingga mencapai durasi yang diinginkan."""
-            if duration is None:
-                duration = clip.duration
-            if clip.duration >= duration:
-                return clip.subclip(0, duration)
-            # Hitung berapa kali pengulangan
-            n = int(duration / clip.duration) + 1
-            clips = [clip] * n
-            from moviepy import concatenate_videoclips
-            return concatenate_videoclips(clips).subclip(0, duration)
+# ================== FUNGSI LOOP MANUAL (TANPA IMPORT) ==================
+def loop_video(clip, duration):
+    """Mengulang clip hingga mencapai durasi tertentu."""
+    if clip.duration >= duration:
+        return clip.subclip(0, duration)
+    # Hitung berapa kali pengulangan
+    n = int(duration / clip.duration) + 1
+    clips = [clip] * n
+    return concatenate_videoclips(clips).subclip(0, duration)
 
 # ================== 1. FETCH VIDEO DARI PEXELS ==================
 def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
@@ -132,9 +118,9 @@ def assemble_video(video_path, audio_path, text_overlay, output_path="final_tikt
         video_clip = VideoFileClip(video_path)
         audio_clip = AudioFileClip(audio_path)
         
-        # Sesuaikan durasi video dengan audio
+        # Sesuaikan durasi video dengan audio menggunakan fungsi loop manual
         if video_clip.duration < audio_clip.duration:
-            video_clip = loop(video_clip, duration=audio_clip.duration)
+            video_clip = loop_video(video_clip, audio_clip.duration)
         else:
             video_clip = video_clip.subclip(0, audio_clip.duration)
         
