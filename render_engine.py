@@ -12,20 +12,21 @@ def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
     url = f"https://api.pexels.com/videos/search?query={keyword}&per_page=1&orientation=portrait"
     headers = {"Authorization": api_key}
     
-    try:
-        response = requests.get(url, headers=headers).json()
-        if response.get("videos"):
-            video_files = response["videos"][0]["video_files"]
-            video_url = next((v["link"] for v in video_files if v["width"] >= 720), video_files[0]["link"])
-            video_data = requests.get(video_url).content
-            with open(output_filename, "wb") as f:
-                f.write(video_data)
-            return output_filename
-        else:
-            return None
-    except Exception as e:
-        print(f"Error fetching Pexels: {e}")
+try:
+    response = requests.get(url, headers=headers).json()
+    if response.get("videos") and len(response["videos"]) > 0:
+        video_files = response["videos"][0]["video_files"]
+        video_url = next((v["link"] for v in video_files if v.get("width", 0) >= 720), video_files[0]["link"])
+        video_data = requests.get(video_url).content
+        with open(output_filename, "wb") as f:
+            f.write(video_data)
+        return output_filename
+    else:
+        print("Video Pexels tidak ditemukan!")
         return None
+except Exception as e:
+    print(f"Error Pexels: {e}")
+    return None
 
 # ================== 2. TEXT-TO-SPEECH (Edge-TTS) ==================
 async def generate_tts(text, output_filename="temp_audio.mp3"):
