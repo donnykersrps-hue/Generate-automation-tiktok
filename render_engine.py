@@ -76,6 +76,26 @@ def safe_set_audio(clip, audio_clip):
     except AttributeError:
         return clip.with_audio(audio_clip)
 
+def safe_write_videofile(clip, *args, **kwargs):
+    """
+    Menulis video dengan aman, mendukung moviepy 1.x dan 2.x.
+    Jika parameter verbose atau logger tidak dikenali (MoviePy 2.x), panggil ulang tanpa keduanya.
+    """
+    try:
+        # Coba panggil dengan semua parameter
+        return clip.write_videofile(*args, **kwargs)
+    except TypeError as e:
+        # Jika error karena unexpected keyword argument (verbose/logger)
+        if "verbose" in str(e) or "logger" in str(e):
+            # Hapus verbose dan logger dari kwargs
+            kwargs.pop("verbose", None)
+            kwargs.pop("logger", None)
+            # Panggil ulang tanpa kedua parameter
+            return clip.write_videofile(*args, **kwargs)
+        else:
+            # Lempar ulang jika error lain
+            raise
+
 # ================== FUNGSI LOOP MANUAL ==================
 def repeat_clip(clip, target_duration):
     """Mengulang clip hingga mencapai durasi tertentu."""
@@ -209,13 +229,15 @@ def assemble_video(video_path, audio_path, text_overlay, output_path="final_tikt
         # MoviePy 2.x tidak menerima parameter transparent/ismask
         text_clip = ImageClip(np.array(text_img))
         # Gunakan safe_set_duration agar kompatibel 1.x dan 2.x
-        text_clip = text_clip.with_duration(video_clip.duration)
+        text_clip = safe_set_duration(text_clip, video_clip.duration)
 
-        # Gabungkan video dan teks, lalu set audio (pakai safe_set_audio jika perlu)
+        # Gabungkan video dan teks, lalu set audio (pakai safe_set_audio)
         final_clip = CompositeVideoClip([video_clip, text_clip])
         final_clip = safe_set_audio(final_clip, audio_clip)
 
-        final_clip.write_videofile(
+        # Gunakan safe_write_videofile untuk menangani perbedaan parameter verbose/logger
+        safe_write_videofile(
+            final_clip,
             output_path,
             fps=24,
             codec="libx264",
