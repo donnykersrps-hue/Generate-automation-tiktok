@@ -33,7 +33,7 @@ async def generate_tts(text, output_filename="temp_audio.mp3"):
     voice = "id-ID-ArdiNeural"
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_filename)
-    return output_filename
+
 
 def create_voiceover(text, output_filename="temp_audio.mp3"):
     asyncio.run(generate_tts(text, output_filename))
