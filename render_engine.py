@@ -35,9 +35,9 @@ try:
     with open(output_filename, "wb") as f:
         f.write(video_data)
     
-except Exception as e:
-    print(f"Error Pexels: {e}")
-    return None
+    except Exception as e:
+        print(f"Error Pexels: {e}")
+        return None
 # ================== 2. TEXT-TO-SPEECH (Edge-TTS) ==================
 async def generate_tts(text, output_filename="temp_audio.mp3"):
     voice = "id-ID-ArdiNeural"
