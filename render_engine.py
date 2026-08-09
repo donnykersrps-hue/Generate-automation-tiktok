@@ -21,7 +21,7 @@ def safe_subclip(clip, start, end):
             # Moviepy 2.x (beberapa versi)
             return clip.subclipped(start, end)
         except AttributeError:
-            # Fallback manual: gunakan with_start dan with_duration
+            # Fallback manual
             return clip.with_start(start).with_duration(end - start)
 
 def safe_resize(clip, newsize=None, height=None, width=None):
@@ -30,9 +30,7 @@ def safe_resize(clip, newsize=None, height=None, width=None):
     Parameter: newsize=(width, height) atau height=..., width=...
     """
     if newsize is None:
-        # Hitung proporsi jika hanya height atau width yang diberikan
         if height is not None and width is None:
-            # Pertahankan aspek rasio
             aspect = clip.w / clip.h
             width = int(height * aspect)
             newsize = (width, height)
@@ -43,20 +41,16 @@ def safe_resize(clip, newsize=None, height=None, width=None):
         else:
             raise ValueError("Harus menentukan newsize atau height/width")
     try:
-        # Moviepy 1.x
         return clip.resize(newsize)
     except AttributeError:
         try:
-            # Moviepy 2.x
             return clip.resized(newsize)
         except AttributeError:
-            # Fallback: gunakan transformasi skala manual (jarang diperlukan)
             raise NotImplementedError("Tidak ada metode resize/resized yang tersedia")
 
 def safe_crop(clip, x1=None, y1=None, x2=None, y2=None, x_center=None, y_center=None, width=None, height=None):
     """Memotong clip dengan aman."""
     try:
-        # Moviepy 1.x
         if all(v is not None for v in [x1, y1, x2, y2]):
             return clip.crop(x1, y1, x2, y2)
         elif x_center is not None and y_center is not None and width is not None and height is not None:
@@ -65,7 +59,6 @@ def safe_crop(clip, x1=None, y1=None, x2=None, y2=None, x_center=None, y_center=
             raise ValueError("Parameter crop tidak lengkap")
     except AttributeError:
         try:
-            # Moviepy 2.x
             if all(v is not None for v in [x1, y1, x2, y2]):
                 return clip.cropped(x1, y1, x2, y2)
             elif x_center is not None and y_center is not None and width is not None and height is not None:
@@ -73,7 +66,6 @@ def safe_crop(clip, x1=None, y1=None, x2=None, y2=None, x_center=None, y_center=
             else:
                 raise ValueError("Parameter crop tidak lengkap")
         except AttributeError:
-            # Fallback: tidak ada metode crop, kita gunakan resize dengan mempertahankan aspek
             raise NotImplementedError("Tidak ada metode crop/cropped yang tersedia")
 
 # ================== FUNGSI LOOP MANUAL ==================
@@ -174,7 +166,7 @@ def create_text_image(text, size=(1080, 1920), font_size=65, color='white', stro
         y += line_heights[idx] + 5
     return img
 
-# ================== 4. RENDER VIDEO UTAMA (DENGAN VALIDASI DAN WRAPPER) ==================
+# ================== 4. RENDER VIDEO UTAMA ==================
 def assemble_video(video_path, audio_path, text_overlay, output_path="final_tiktok.mp4", resolution=(1080, 1920)):
     # VALIDASI FILE
     if not os.path.exists(video_path):
@@ -203,12 +195,9 @@ def assemble_video(video_path, audio_path, text_overlay, output_path="final_tikt
         else:
             video_clip = safe_subclip(video_clip, 0, audio_clip.duration)
 
-        # Resize dan crop ke resolusi yang diinginkan
-        # Pertama resize dengan menjaga aspek rasio berdasarkan tinggi
+        # Resize dan crop
         video_clip = safe_resize(video_clip, height=resolution[1])
-        # Jika lebar hasil lebih besar dari target, crop dari tengah
         if video_clip.w > resolution[0]:
-            # Crop dari tengah dengan lebar target
             video_clip = safe_crop(
                 video_clip,
                 x_center=video_clip.w / 2,
