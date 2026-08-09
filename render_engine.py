@@ -62,6 +62,20 @@ def safe_crop(clip, x1=None, y1=None, x2=None, y2=None, x_center=None, y_center=
         except AttributeError:
             raise NotImplementedError("Tidak ada metode crop/cropped yang tersedia")
 
+def safe_set_duration(clip, duration):
+    """Mengatur durasi clip dengan aman (set_duration atau with_duration)."""
+    try:
+        return clip.set_duration(duration)
+    except AttributeError:
+        return clip.with_duration(duration)
+
+def safe_set_audio(clip, audio_clip):
+    """Mengatur audio clip dengan aman (set_audio atau with_audio)."""
+    try:
+        return clip.set_audio(audio_clip)
+    except AttributeError:
+        return clip.with_audio(audio_clip)
+
 # ================== FUNGSI LOOP MANUAL ==================
 def repeat_clip(clip, target_duration):
     """Mengulang clip hingga mencapai durasi tertentu."""
@@ -192,11 +206,15 @@ def assemble_video(video_path, audio_path, text_overlay, output_path="final_tikt
             )
 
         text_img = create_text_image(text_overlay, size=resolution)
-        # PERBAIKAN PENTING: Dihapus parameter transparent=True & ismask=False agar cocok dengan MoviePy 2.x
+        # MoviePy 2.x tidak menerima parameter transparent/ismask
         text_clip = ImageClip(np.array(text_img))
-        text_clip = text_clip.set_duration(video_clip.duration)
+        # Gunakan safe_set_duration agar kompatibel 1.x dan 2.x
+        text_clip = safe_set_duration(text_clip, video_clip.duration)
 
-        final_clip = CompositeVideoClip([video_clip, text_clip]).set_audio(audio_clip)
+        # Gabungkan video dan teks, lalu set audio (pakai safe_set_audio jika perlu)
+        final_clip = CompositeVideoClip([video_clip, text_clip])
+        final_clip = safe_set_audio(final_clip, audio_clip)
+
         final_clip.write_videofile(
             output_path,
             fps=24,
