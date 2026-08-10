@@ -126,7 +126,7 @@ def create_voiceover(text, output_filename="temp_audio.mp3", rate="-5%"):
     logging.info(f"TTS selesai: {output_filename}")
     return output_filename
 
-# ================== 3. HIGHLIGHT + OVERLAY ==================
+# ================== 3. HIGHLIGHT + OVERLAY (fungsi yang dipanggil) ==================
 def create_highlighted_text_image(text, size=(1080, 1920), font_size=52,
                                   base_color='white', highlight_color='#FFD700',
                                   stroke_color='black', stroke_width=6):
@@ -172,7 +172,6 @@ def create_highlighted_text_image(text, size=(1080, 1920), font_size=52,
     for seg_text, seg_color in segments:
         for word in seg_text.split():
             words_with_colors.append((word, seg_color))
-        # tambahkan spasi sebagai pemisah antar kata (akan diatur di rendering)
 
     # Bentuk baris (max 24 karakter)
     lines = []
@@ -204,12 +203,11 @@ def create_highlighted_text_image(text, size=(1080, 1920), font_size=52,
 
     y = y_start
     for line in lines:
-        # Hitung total lebar baris (termasuk spasi)
         total_width = 0
         for word, _ in line:
             w, _ = get_text_size(word, font)
             total_width += w
-        total_width += (len(line) - 1) * (font_size // 3)  # perkiraan lebar spasi
+        total_width += (len(line) - 1) * (font_size // 3)
         x = (size[0] - total_width) // 2
 
         for word, color in line:
@@ -242,7 +240,6 @@ def generate_subtitle_clips(text, total_duration, resolution=(1080, 1920),
     durasi_per_frasa = total_duration / len(frasa)
     clips = []
 
-    # Load font subtitle
     font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
@@ -272,7 +269,6 @@ def generate_subtitle_clips(text, total_duration, resolution=(1080, 1920),
         x = (resolution[0] - tw) // 2
         y = resolution[1] - int(resolution[1] * 0.15) - th
 
-        # Stroke
         if stroke_width > 0:
             for dx in range(-stroke_width, stroke_width+1):
                 for dy in range(-stroke_width, stroke_width+1):
@@ -290,7 +286,6 @@ def generate_subtitle_clips(text, total_duration, resolution=(1080, 1920),
 # ================== 5. BGM (FALLBACK) ==================
 def get_bgm_from_description(description):
     # Sementara pakai fallback Pixabay
-    # Nanti bisa upgrade ke Tunetank atau Mubert
     return "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"
 
 # ================== 6. ASSEMBLE VIDEO ==================
@@ -356,7 +351,7 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
                 clip = safe_crop(clip, x_center=clip.w/2, y_center=clip.h/2,
                                  width=resolution[0], height=resolution[1])
 
-            # Overlay dengan highlight
+            # OVERLAY dengan HIGHLIGHT (panggil fungsi yang benar)
             current_text = text_segments[idx] if idx < len(text_segments) else ""
             if current_text.strip():
                 txt_img = create_highlighted_text_image(current_text, size=resolution)
