@@ -60,7 +60,7 @@ if st.button("✨ Generate Naskah & Visual Plan"):
     else:
         with st.spinner("Meminta AI meracik naskah syahdu & 3 scene visual..."):
             genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-3.6-flash')
 
             prompt = f"""
             Kamu adalah scriptwriter & creative director profesional untuk konten edukasi islami TikTok (@ruangteduh.id88).
