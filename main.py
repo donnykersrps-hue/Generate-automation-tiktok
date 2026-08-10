@@ -98,7 +98,7 @@ if st.button("✨ Generate Naskah & Visual Plan"):
                 st.session_state.bgm_description = bgm
                 st.session_state.step = 2
 
-                # Simpan narasi ke file untuk subtitle
+                # === INI YANG PENTING: SIMPAN NARASI KE FILE ===
                 with open("/tmp/narasi_text.txt", "w") as f:
                     f.write(vo)
 
@@ -126,10 +126,11 @@ if st.session_state.step >= 2:
                     aud_path = create_voiceover(st.session_state.voiceover_text, rate="-5%")
 
                 with st.spinner("Merakit video (highlight, subtitle, BGM)..."):
+                    # === PANGGIL assemble_video DENGAN PARAMETER YANG BENAR ===
                     final_path = assemble_video(
-                        v_paths,
-                        aud_path,
-                        st.session_state.text_segments,
+                        video_paths=v_paths,
+                        audio_path=aud_path,
+                        text_segments=st.session_state.text_segments,
                         bgm_description=st.session_state.bgm_description
                     )
 
