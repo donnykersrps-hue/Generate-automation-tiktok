@@ -16,7 +16,7 @@ from moviepy import (
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
 
-# ================== WRAPPER FUNGSI MOVIEPY ==================
+# ================== WRAPPER MOVIEPY (SAFE API) ==================
 def safe_subclip(clip, start, end):
     try:
         return clip.subclipped(start, end)
@@ -76,7 +76,7 @@ def safe_write_videofile(clip, *args, **kwargs):
     kwargs.pop("logger", None)
     return clip.write_videofile(*args, **kwargs)
 
-# ================== 1. PEXELS ==================
+# ================== 1. PEXELS API ==================
 def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
     url = f"https://api.pexels.com/videos/search?query={keyword}&per_page=1&orientation=portrait"
     headers = {
@@ -84,39 +84,33 @@ def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
     try:
-        logging.info(f"Mengunduh Pexels: {keyword}")
         response = requests.get(url, headers=headers, timeout=15).json()
         videos = response.get("videos", [])
         if not videos:
-            logging.warning(f"Keyword '{keyword}' tidak ditemukan")
             return None
         video_files = videos[0].get("video_files", [])
         if not video_files:
-            logging.warning(f"Tidak ada video_files untuk '{keyword}'")
             return None
         video_url = next((v["link"] for v in video_files if v.get("width", 0) >= 720), video_files[0]["link"])
         video_data = requests.get(video_url, headers=headers, timeout=20).content
         with open(output_filename, "wb") as f:
             f.write(video_data)
-        logging.info(f"Berhasil unduh {output_filename} ({len(video_data)//1024} KB)")
         return output_filename
     except Exception as e:
         logging.error(f"Error Pexels: {e}")
         return None
 
-# ================== 2. TTS ==================
+# ================== 2. EDGE TTS ==================
 async def generate_tts(text, output_filename="temp_audio.mp3", rate="-5%"):
     voice = "id-ID-ArdiNeural"
     communicate = edge_tts.Communicate(text, voice, rate=rate)
     await communicate.save(output_filename)
 
 def create_voiceover(text, output_filename="temp_audio.mp3", rate="-5%"):
-    logging.info(f"Generate TTS dengan rate {rate}...")
     asyncio.run(generate_tts(text, output_filename, rate))
-    logging.info(f"TTS selesai: {output_filename}")
     return output_filename
 
-# ================== 3. TEKS HIGHLIGHT (SCENE OVERLAY) ==================
+# ================== 3. TEKS HIGHLIGHT EMAS (OVERLAY SCENE) ==================
 def create_highlighted_text_image(text, size=(1080, 1920), font_size=52,
                                   base_color='white', highlight_color='#FFD700',
                                   stroke_color='black', stroke_width=6):
@@ -174,7 +168,7 @@ def create_text_image(text, size=(1080, 1920)):
 
 # ================== 4. SUBTITLE DINAMIS PER FRASA (AREA BAWAH) ==================
 def generate_subtitle_clips(text, total_duration, resolution=(1080, 1920),
-                            font_size=40, color='white', stroke_color='black', stroke_width=4):
+                            font_size=42, color='white', stroke_color='black', stroke_width=4):
     words = text.split()
     if not words:
         return []
@@ -216,7 +210,7 @@ def generate_subtitle_clips(text, total_duration, resolution=(1080, 1920),
                 tw, th = draw.textsize(frasa_text, font=font)
 
             x = (resolution[0] - tw) // 2
-            y = resolution[1] - 300  # Posisi subtitle bagian bawah
+            y = resolution[1] - 320  # Posisi presisi subtitle bagian bawah
 
             if stroke_width > 0:
                 for dx in range(-stroke_width, stroke_width+1):
@@ -227,7 +221,7 @@ def generate_subtitle_clips(text, total_duration, resolution=(1080, 1920),
 
             txt_clip = ImageClip(np.array(img))
             txt_clip = safe_set_duration(txt_clip, durasi_per_frasa)
-            txt_clip = txt_clip.set_start(idx * durasi_per_frasa)
+            txt_clip = txt_clip.with_start(idx * durasi_per_frasa) if hasattr(txt_clip, 'with_start') else txt_clip.set_start(idx * durasi_per_frasa)
             clips.append(txt_clip)
         except Exception as e:
             logging.error(f"Gagal buat subtitle clip ke-{idx}: {e}")
@@ -247,7 +241,6 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
 
         audio_clip = AudioFileClip(audio_path)
         total_duration = audio_clip.duration
-        logging.info(f"Durasi audio: {total_duration:.2f} detik")
 
         valid_vpaths = [p for p in video_paths if p and os.path.exists(p)]
         num_scenes = len(text_segments) if len(text_segments) > 0 else 3
@@ -264,7 +257,6 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
             else:
                 from moviepy.video.VideoClip import ColorClip
                 clip = ColorClip(size=resolution, color=(20, 20, 30), duration=scene_duration)
-                logging.warning(f"Scene {idx+1} menggunakan ColorClip karena tidak ada video valid")
 
             if clip.duration < scene_duration:
                 reps = int(scene_duration / clip.duration) + 1
@@ -288,31 +280,27 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
             prepared_clips.append(composite_scene)
 
         final_video = concatenate_videoclips(prepared_clips)
-        logging.info("Video scenes berhasil digabung")
 
-        # ===== SUBTITLE DINAMIS =====
+        # 🎯 KUNCI UTAMA: TEMPEL SUBTITLE DINAMIS PER FRASA DI AREA BAWAH
         if full_narration and full_narration.strip():
             try:
-                logging.info("Membuat subtitle per frasa...")
+                logging.info("Membuat subtitle dinamis per frasa...")
                 sub_clips = generate_subtitle_clips(full_narration, total_duration, resolution)
                 if sub_clips:
                     final_video = CompositeVideoClip([final_video] + sub_clips)
-                    logging.info(f"{len(sub_clips)} subtitle berhasil ditambahkan")
             except Exception as e:
                 logging.warning(f"Gagal menempelkan subtitle: {e}")
 
-        # ===== BGM DENGAN USER-AGENT =====
+        # BGM BACKGROUND MUSIC
         try:
             bgm_path = "temp_bgm.mp3"
             bgm_url = "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
             if not os.path.exists(bgm_path):
-                logging.info("Mengunduh BGM dari Pixabay...")
                 bgm_bytes = requests.get(bgm_url, headers=headers, timeout=15).content
                 with open(bgm_path, "wb") as f:
                     f.write(bgm_bytes)
-                logging.info("BGM berhasil diunduh")
 
             bgm_clip = AudioFileClip(bgm_path)
             if bgm_clip.duration < total_duration:
@@ -326,32 +314,17 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
                 bgm_clip = bgm_clip.multiply_volume(0.15)
 
             final_audio = CompositeAudioClip([audio_clip, bgm_clip])
-            logging.info("BGM berhasil digabung")
         except Exception as e:
-            logging.warning(f"BGM warning: {e}, hanya menggunakan narasi")
+            logging.warning(f"BGM warning: {e}")
             final_audio = audio_clip
 
         final_clip = safe_set_audio(final_video, final_audio)
 
-        # ===== RENDER VIDEO =====
-        logging.info("Menyimpan video final...")
         safe_write_videofile(
             final_clip, output_path,
             fps=24, codec="libx264", audio_codec="aac",
             preset="ultrafast", threads=2, ffmpeg_params=["-crf", "23"]
         )
-
-        logging.info(f"Video selesai: {output_path}")
-
-        # Cleanup file sementara
-        for f in ["temp_video_0.mp4", "temp_video_1.mp4", "temp_video_2.mp4",
-                  "temp_audio.mp3", "temp_bgm.mp3"]:
-            if os.path.exists(f):
-                try:
-                    os.remove(f)
-                    logging.info(f"Hapus {f}")
-                except:
-                    pass
 
         audio_clip.close()
         final_clip.close()
