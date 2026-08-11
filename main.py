@@ -139,8 +139,8 @@ if st.session_state.step == 3 and st.session_state.final_video_path:
     st.header("📱 3. Preview")
     
     # Gunakan kolom agar video tidak memenuhi layar penuh
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
+    col1, col2 = st.columns([1, 2])
+    with col1:
         st.video(st.session_state.final_video_path)
         if st.button("📤 Share ke TikTok (Simulasi)"):
             st.success("Berhasil dikirim ke TikTok!")
