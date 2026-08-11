@@ -180,7 +180,7 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
             cmd += ["-i", bgm_path]
             filter_complex = (
                 f"[0:v]{vf_filter}[vout];"
-                f"[2:a]volume=0.15[bgm];[1:a][bgm]amix=inputs=2:duration=first[aout]"
+                f"[2:a]volume=0.30[bgm];[1:a][bgm]amix=inputs=2:duration=first[aout]"
             )
             cmd += ["-filter_complex", filter_complex, "-map", "[vout]", "-map", "[aout]"]
         else:
