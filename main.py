@@ -49,7 +49,7 @@ if st.button("✨ Generate Naskah & Visual Plan"):
     else:
         with st.spinner("AI meracik naskah..."):
             genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel('gemini-3.6-flash')
+            model = genai.GenerativeModel('gemini-1.5-flash')
 
             prompt = f"""
             Kamu adalah scriptwriter & creative director profesional untuk konten edukasi islami TikTok (@ruangteduh.id88).
@@ -124,7 +124,7 @@ if st.session_state.step >= 2:
                     audio_path=aud_path,
                     text_segments=st.session_state.text_segments,
                     bgm_description=st.session_state.bgm_description,
-                    full_narration=st.session_state.voiceover_text  # <- untuk subtitle
+                    full_narration=st.session_state.voiceover_text
                 )
 
                 if final_path:
@@ -134,9 +134,13 @@ if st.session_state.step >= 2:
                 else:
                     st.error("Render gagal. Cek log untuk detail error.")
 
-# ================== PREVIEW ==================
+# ================== PREVIEW (DIPERBAIKI AGAR TIDAK KEBESARAN) ==================
 if st.session_state.step == 3 and st.session_state.final_video_path:
     st.header("📱 3. Preview")
-    st.video(st.session_state.final_video_path)
-    if st.button("📤 Share ke TikTok (Simulasi)"):
-        st.success("Berhasil dikirim ke TikTok!")
+    
+    # Gunakan kolom agar video tidak memenuhi layar penuh
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.video(st.session_state.final_video_path)
+        if st.button("📤 Share ke TikTok (Simulasi)"):
+            st.success("Berhasil dikirim ke TikTok!")
