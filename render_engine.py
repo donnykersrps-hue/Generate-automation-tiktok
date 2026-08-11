@@ -41,12 +41,12 @@ def create_voiceover(text, output_filename="temp_audio.mp3", rate="-5%"):
     asyncio.run(generate_tts(text, output_filename, rate))
     return output_filename
 
-# ================== 3. GENERATOR SUBTITLE ASS (DINAMIS & TIMESTAMP PRESISI) ==================
+# ================== 3. GENERATOR SUBTITLE ASS (AI COLOR PRESETS) ==================
 def create_ass_subtitle_file(text, total_duration, text_segments=None, output_ass="subtitles.ass"):
     """
-    Membuat file subtitle ASS yang menampung:
-    1. Teks Emas Highlight di Tengah Layar (Alignment 5)
-    2. Subtitle Dinamis Per Frasa di Bawah Layar (Alignment 2)
+    Inisiatif AI Color Presets:
+    - Header Center: Emas Mewah (&H00D7FF&) + Outline Hitam
+    - Subtitle Bottom: Soft Cream (&H00DCF8FF&) Nyaman di Mata (MarginV 240)
     """
     ass_content = """[Script Info]
 ScriptType: v4.00+
@@ -55,8 +55,8 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: TikTokCenter,DejaVu Sans,58,&H00FFFFFF,&H00000000,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,5,0,5,50,50,0,1
-Style: TikTokSub,DejaVu Sans,48,&H00FFFFFF,&H00000000,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,4,0,2,50,50,220,1
+Style: TikTokHeaderCenter,DejaVu Sans,60,&H00D7FF&,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,5,0,5,50,50,0,1
+Style: TikTokSubSoft,DejaVu Sans,48,&H00DCF8FF&,&H00000000,&H00000000,&H60000000,1,0,0,0,100,100,0,0,1,3,0,2,60,60,240,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -69,7 +69,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         cs = int((seconds - int(seconds)) * 100)
         return f"{hrs}:{mins:02d}:{secs:02d}.{cs:02d}"
 
-    # A. Overlay Teks Emas Tengah (Per Segmen)
+    # A. Header Poin Utama (Emas Mewah di Tengah)
     if text_segments:
         num_scenes = len(text_segments)
         scene_duration = total_duration / max(num_scenes, 1)
@@ -77,22 +77,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if seg_text.strip():
                 t_start = format_ass_time(idx * scene_duration)
                 t_end = format_ass_time((idx + 1) * scene_duration)
-                
-                # Ubah *kata* jadi warna emas
-                formatted_text = seg_text.replace("{", "").replace("}", "")
-                words = formatted_text.split()
-                line_words = []
-                for w in words:
-                    if w.startswith("*") and w.endswith("*"):
-                        clean_w = w.replace("*", "")
-                        line_words.append(f"{{\\c&H00D7FF&}}{clean_w}{{\\c&HFFFFFF&}}")
-                    else:
-                        line_words.append(w)
-                
-                final_center_text = " ".join(line_words)
-                ass_content += f"Dialogue: 1,{t_start},{t_end},TikTokCenter,,0,0,0,,{final_center_text}\n"
+                clean_header = seg_text.replace("*", "").replace("{", "").replace("}", "")
+                ass_content += f"Dialogue: 1,{t_start},{t_end},TikTokHeaderCenter,,0,0,0,,{clean_header}\n"
 
-    # B. Subtitle Dinamis Berjalan di Bawah (Per Frasa 3-4 Kata)
+    # B. Subtitle Dinamis (Soft Cream di Bawah, Frasa 3-4 Kata)
     words = text.split()
     if words:
         frasa = []
@@ -107,7 +95,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             t_start = format_ass_time(idx * durasi_per_frasa)
             t_end = format_ass_time((idx + 1) * durasi_per_frasa)
             clean_text = f_text.replace("{", "").replace("}", "")
-            ass_content += f"Dialogue: 0,{t_start},{t_end},TikTokSub,,0,0,0,,{clean_text}\n"
+            ass_content += f"Dialogue: 0,{t_start},{t_end},TikTokSubSoft,,0,0,0,,{clean_text}\n"
 
     os.makedirs(os.path.dirname(os.path.abspath(output_ass)) or '.', exist_ok=True)
     with open(output_ass, "w", encoding="utf-8") as f:
@@ -129,7 +117,7 @@ def get_audio_duration(audio_path):
     except Exception:
         return 60.0
 
-# ================== 5. ASSEMBLE VIDEO UTAMA (PURE FFMPEG) ==================
+# ================== 5. ASSEMBLE VIDEO UTAMA (DIRECT FFMPEG) ==================
 def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
                    full_narration="", output_path="final_tiktok.mp4", resolution=(1080, 1920)):
     if not audio_path or not os.path.exists(audio_path):
@@ -143,7 +131,7 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
         total_duration = get_audio_duration(audio_path)
         logging.info(f"Durasi audio: {total_duration:.2f} detik")
 
-        # 1. Buat Subtitle ASS (Highlight Tengah + Subtitle Bawah)
+        # 1. Buat Subtitle ASS
         ass_file = os.path.abspath("subtitles.ass")
         create_ass_subtitle_file(full_narration, total_duration, text_segments, ass_file)
 
@@ -166,7 +154,7 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
 
         safe_ass = ass_file.replace(":", "\\:").replace("'", "'\\''")
 
-        # 3. Rakit Komando Pure FFmpeg
+        # 3. Direct FFmpeg Mixing (BGM 30% / volume=0.30)
         if valid_vpath:
             input_args = ["-stream_loop", "-1", "-i", valid_vpath]
             vf_filter = f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,subtitles='{safe_ass}'"
