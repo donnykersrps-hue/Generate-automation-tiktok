@@ -5,7 +5,6 @@ import edge_tts
 import textwrap
 import numpy as np
 import logging
-import re
 import traceback
 from PIL import Image, ImageDraw, ImageFont
 from moviepy import (
@@ -81,7 +80,7 @@ def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
     url = f"https://api.pexels.com/videos/search?query={keyword}&per_page=1&orientation=portrait"
     headers = {
         "Authorization": api_key,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
     try:
         response = requests.get(url, headers=headers, timeout=15).json()
@@ -110,7 +109,7 @@ def create_voiceover(text, output_filename="temp_audio.mp3", rate="-5%"):
     asyncio.run(generate_tts(text, output_filename, rate))
     return output_filename
 
-# ================== 3. TEKS HIGHLIGHT EMAS (OVERLAY SCENE) ==================
+# ================== 3. TEKS HIGHLIGHT EMAS (OVERLAY TENGAH) ==================
 def create_highlighted_text_image(text, size=(1080, 1920), font_size=52,
                                   base_color='white', highlight_color='#FFD700',
                                   stroke_color='black', stroke_width=6):
@@ -146,8 +145,8 @@ def create_highlighted_text_image(text, size=(1080, 1920), font_size=52,
         try:
             bbox = draw.textbbox((0, 0), line, font=font)
             tw = bbox[2] - bbox[0]
-        except AttributeError:
-            tw, _ = draw.textsize(line, font=font)
+        except Exception:
+            tw = len(line) * (font_size // 2)
             
         x = (size[0] - tw) // 2
 
@@ -205,12 +204,11 @@ def generate_subtitle_clips(text, total_duration, resolution=(1080, 1920),
             try:
                 bbox = draw.textbbox((0, 0), frasa_text, font=font)
                 tw = bbox[2] - bbox[0]
-                th = bbox[3] - bbox[1]
-            except AttributeError:
-                tw, th = draw.textsize(frasa_text, font=font)
+            except Exception:
+                tw = len(frasa_text) * (font_size // 2)
 
             x = (resolution[0] - tw) // 2
-            y = resolution[1] - 320  # Posisi presisi subtitle bagian bawah
+            y = resolution[1] - 380  # Posisi presisi subtitle bagian bawah (di atas UI TikTok)
 
             if stroke_width > 0:
                 for dx in range(-stroke_width, stroke_width+1):
@@ -221,7 +219,13 @@ def generate_subtitle_clips(text, total_duration, resolution=(1080, 1920),
 
             txt_clip = ImageClip(np.array(img))
             txt_clip = safe_set_duration(txt_clip, durasi_per_frasa)
-            txt_clip = txt_clip.with_start(idx * durasi_per_frasa) if hasattr(txt_clip, 'with_start') else txt_clip.set_start(idx * durasi_per_frasa)
+            start_time = idx * durasi_per_frasa
+            
+            try:
+                txt_clip = txt_clip.with_start(start_time)
+            except AttributeError:
+                txt_clip = txt_clip.set_start(start_time)
+
             clips.append(txt_clip)
         except Exception as e:
             logging.error(f"Gagal buat subtitle clip ke-{idx}: {e}")
@@ -281,7 +285,7 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
 
         final_video = concatenate_videoclips(prepared_clips)
 
-        # 🎯 KUNCI UTAMA: TEMPEL SUBTITLE DINAMIS PER FRASA DI AREA BAWAH
+        # 🎯 SUBTITLE DINAMIS PER FRASA DI AREA BAWAH
         if full_narration and full_narration.strip():
             try:
                 logging.info("Membuat subtitle dinamis per frasa...")
@@ -291,29 +295,33 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
             except Exception as e:
                 logging.warning(f"Gagal menempelkan subtitle: {e}")
 
-        # BGM BACKGROUND MUSIC
+        # 🎯 BGM BACKGROUND MUSIC DENGAN USER-AGENT STABLE STREAM
         try:
             bgm_path = "temp_bgm.mp3"
             bgm_url = "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
-            if not os.path.exists(bgm_path):
-                bgm_bytes = requests.get(bgm_url, headers=headers, timeout=15).content
-                with open(bgm_path, "wb") as f:
-                    f.write(bgm_bytes)
+            if not os.path.exists(bgm_path) or os.path.getsize(bgm_path) < 1000:
+                resp = requests.get(bgm_url, headers=headers, timeout=15)
+                if resp.status_code == 200:
+                    with open(bgm_path, "wb") as f:
+                        f.write(resp.content)
 
-            bgm_clip = AudioFileClip(bgm_path)
-            if bgm_clip.duration < total_duration:
-                reps = int(total_duration / bgm_clip.duration) + 1
-                bgm_clip = concatenate_videoclips([bgm_clip] * reps)
-            bgm_clip = safe_subclip(bgm_clip, 0, total_duration)
-            
-            try:
-                bgm_clip = bgm_clip.volumex(0.15)
-            except AttributeError:
-                bgm_clip = bgm_clip.multiply_volume(0.15)
+            if os.path.exists(bgm_path) and os.path.getsize(bgm_path) > 1000:
+                bgm_clip = AudioFileClip(bgm_path)
+                if bgm_clip.duration < total_duration:
+                    reps = int(total_duration / bgm_clip.duration) + 1
+                    bgm_clip = concatenate_videoclips([bgm_clip] * reps)
+                bgm_clip = safe_subclip(bgm_clip, 0, total_duration)
+                
+                try:
+                    bgm_clip = bgm_clip.volumex(0.12)
+                except AttributeError:
+                    bgm_clip = bgm_clip.multiply_volume(0.12)
 
-            final_audio = CompositeAudioClip([audio_clip, bgm_clip])
+                final_audio = CompositeAudioClip([audio_clip, bgm_clip])
+            else:
+                final_audio = audio_clip
         except Exception as e:
             logging.warning(f"BGM warning: {e}")
             final_audio = audio_clip
