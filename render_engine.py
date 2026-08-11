@@ -2,11 +2,8 @@ import os
 import requests
 import asyncio
 import edge_tts
-import textwrap
 import logging
 import subprocess
-import json
-import time
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -44,14 +41,8 @@ def create_voiceover(text, output_filename="temp_audio.mp3", rate="-5%"):
     asyncio.run(generate_tts(text, output_filename, rate))
     return output_filename
 
-# ================== 3. GENERATOR SUBTITLE ASS (DINAMIS & ESTETIK) ==================
+# ================== 3. SUBTITLE ASS PRESISI TIMESTAMP ==================
 def create_ass_subtitle_file(text, total_duration, output_ass="subtitles.ass"):
-    """
-    Membuat file subtitle ASS otomatis dengan styling khusus TikTok:
-    - Font Bold Putih + Stroke/Outline Hitam
-    - Posisi di area bawah layar (Alignment 2, MarginV 120)
-    - Bergantian per frasa (3-4 kata) mengikuti total durasi audio
-    """
     words = text.split()
     if not words:
         return None
@@ -65,7 +56,6 @@ def create_ass_subtitle_file(text, total_duration, output_ass="subtitles.ass"):
 
     durasi_per_frasa = total_duration / max(len(frasa), 1)
 
-    # Header ASS Style
     ass_content = """[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -73,23 +63,24 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: TikTokSub,DejaVu Sans,54,&H00FFFFFF,&H00000000,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,4,0,2,50,50,220,1
+Style: TikTokSub,DejaVu Sans,52,&H00FFFFFF,&H00000000,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,4,0,2,50,50,220,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
-    def format_time(seconds):
+    def format_ass_time(seconds):
         hrs = int(seconds // 3600)
         mins = int((seconds % 3600) // 60)
         secs = int(seconds % 60)
-        msecs = int((seconds - int(seconds)) * 100)
-        return f"{hrs}:{mins:02d}:{secs:02d}.{msecs:02d}"
+        cs = int((seconds - int(seconds)) * 100)
+        return f"{hrs}:{mins:02d}:{secs:02d}.{cs:02d}"
 
     for idx, f_text in enumerate(frasa):
-        t_start = format_time(idx * durasi_per_frasa)
-        t_end = format_time((idx + 1) * durasi_per_frasa)
-        # Escape karakter khusus ASS
+        start_sec = idx * durasi_per_frasa
+        end_sec = (idx + 1) * durasi_per_frasa
+        t_start = format_ass_time(start_sec)
+        t_end = format_ass_time(end_sec)
         clean_f_text = f_text.replace("{", "").replace("}", "")
         ass_content += f"Dialogue: 0,{t_start},{t_end},TikTokSub,,0,0,0,,{clean_f_text}\n"
 
@@ -98,7 +89,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     return output_ass
 
-# ================== 4. HELPER DURASI AUDIO (VIA FFPROBE) ==================
 def get_audio_duration(audio_path):
     cmd = [
         "ffprobe", "-v", "error",
@@ -110,14 +100,13 @@ def get_audio_duration(audio_path):
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         return float(result.stdout.strip())
     except Exception as e:
-        logging.error(f"Error get duration: {e}")
+        logging.error(f"Error duration: {e}")
         return 60.0
 
-# ================== 5. ASSEMBLE VIDEO (DIRECT FFMPEG SUBPROCESS) ==================
+# ================== 4. ASSEMBLE VIDEO UTAMA ==================
 def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
                    full_narration="", output_path="final_tiktok.mp4", resolution=(1080, 1920)):
     if not audio_path or not os.path.exists(audio_path):
-        logging.error("Audio narasi tidak ditemukan!")
         return None
 
     try:
@@ -125,15 +114,14 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
         os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
 
         total_duration = get_audio_duration(audio_path)
-        logging.info(f"Durasi audio narasi: {total_duration:.2f} detik")
-
-        # 1. Siapkan Subtitle ASS
-        ass_file = "subtitles.ass"
+        
+        # Build Subtitle ASS
+        ass_file = os.path.abspath("subtitles.ass")
         if full_narration and full_narration.strip():
             create_ass_subtitle_file(full_narration, total_duration, ass_file)
 
-        # 2. Siapkan BGM
-        bgm_path = "temp_bgm.mp3"
+        # Download BGM
+        bgm_path = os.path.abspath("temp_bgm.mp3")
         bgm_url = "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
@@ -143,62 +131,44 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
                 if resp.status_code == 200:
                     with open(bgm_path, "wb") as f:
                         f.write(resp.content)
-            except Exception as e:
-                logging.warning(f"BGM Download error: {e}")
+            except Exception:
+                pass
 
         has_bgm = os.path.exists(bgm_path) and os.path.getsize(bgm_path) > 1000
-
-        # 3. Ambil Video Pertama yang Valid
         valid_vpath = next((p for p in video_paths if p and os.path.exists(p)), None)
 
-        # 4. RACIK PERINTAH FFMPEG DIRECT
-        # Jika video valid ada, gunakan loop video; jika tidak, buat background warna hitam murni
+        # ESCAPE PATH UNTUK FFMPEG LINUX
+        safe_ass_path = ass_file.replace(":", "\\:").replace("'", "'\\''")
+
         if valid_vpath:
             input_args = ["-stream_loop", "-1", "-i", valid_vpath]
-            video_filter = f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,subtitles={ass_file}"
+            vf_filter = f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,subtitles='{safe_ass_path}'"
         else:
             input_args = ["-f", "lavfi", "-i", "color=c=black:s=1080x1920"]
-            video_filter = f"subtitles={ass_file}"
+            vf_filter = f"subtitles='{safe_ass_path}'"
 
         cmd = ["ffmpeg", "-y"] + input_args + ["-i", audio_path]
 
         if has_bgm:
             cmd += ["-i", bgm_path]
-            # Filter Complex: Gabungkan audio Narasi + BGM (Volume BGM 15%)
-            filter_complex = f"[0:v]{video_filter}[vout];[2:a]volume=0.15[bgm];[1:a][bgm]amix=inputs=2:duration=first[aout]"
-            cmd += [
-                "-filter_complex", filter_complex,
-                "-map", "[vout]",
-                "-map", "[aout]"
-            ]
+            filter_complex = f"[0:v]{vf_filter}[vout];[2:a]volume=0.15[bgm];[1:a][bgm]amix=inputs=2:duration=first[aout]"
+            cmd += ["-filter_complex", filter_complex, "-map", "[vout]", "-map", "[aout]"]
         else:
-            cmd += [
-                "-vf", video_filter,
-                "-map", "0:v",
-                "-map", "1:a"
-            ]
+            cmd += ["-vf", vf_filter, "-map", "0:v", "-map", "1:a"]
 
-        # Konfigurasi Output FFmpeg
         cmd += [
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-crf", "23",
-            "-c:a", "aac",
-            "-b:a", "128k",
-            "-t", str(total_duration),
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+            "-c:a", "aac", "-b:a", "128k", "-t", str(total_duration),
             output_path
         ]
 
-        logging.info("Menjalankan perakitan video via Direct FFmpeg...")
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
         if result.returncode == 0 and os.path.exists(output_path):
-            logging.info("Render video berhasil dengan Direct FFmpeg!")
             return output_path
         else:
-            logging.error(f"FFmpeg Error Log: {result.stderr}")
+            logging.error(f"FFmpeg error: {result.stderr}")
             return None
 
     except Exception as e:
-        logging.error(f"Error rendering: {str(e)}")
+        logging.error(f"Render exception: {e}")
         return None
