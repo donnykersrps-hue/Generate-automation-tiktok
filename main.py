@@ -3,7 +3,7 @@ import google.generativeai as genai
 import os
 from render_engine import get_pexels_video, create_voiceover, assemble_video
 
-# ================== CONFIG ==================
+# ================== CONFIGURASI UTAMA ==================
 st.set_page_config(page_title="AI TikTok Studio", layout="wide")
 st.title("🎬 AI-Powered TikTok Content Studio")
 st.markdown("Otomatiskan pembuatan konten dari teks ke video hanya dengan satu klik.")
@@ -22,7 +22,7 @@ if "final_video_path" not in st.session_state:
 if "bgm_description" not in st.session_state:
     st.session_state.bgm_description = ""
 
-# ================== SIDEBAR ==================
+# ================== SIDEBAR (API KEYS) ==================
 gemini_key = st.secrets.get("GEMINI_API_KEY", "")
 pexels_key = st.secrets.get("PEXELS_API_KEY", "")
 
@@ -37,7 +37,7 @@ with st.sidebar:
     else:
         st.success("✅ Pexels Key terdeteksi")
 
-# ================== GENERATE NASKAH ==================
+# ================== STEP 1: GENERATE NASKAH ==================
 st.header("📝 1. Tentukan Topik")
 topic = st.text_input("Masukkan ide konten (contoh: hadist tentang shalawat)")
 
@@ -47,7 +47,7 @@ if st.button("✨ Generate Naskah & Visual Plan"):
     elif not topic:
         st.warning("Topik harus diisi!")
     else:
-        with st.spinner("AI meracik naskah..."):
+        with st.spinner("AI meracik naskah & rancangan visual..."):
             genai.configure(api_key=gemini_key)
             model = genai.GenerativeModel('gemini-3.6-flash')
 
@@ -101,7 +101,7 @@ if st.button("✨ Generate Naskah & Visual Plan"):
             except Exception as e:
                 st.error(f"Gagal parsing naskah: {e}")
 
-# ================== RENDER VIDEO ==================
+# ================== STEP 2: RENDER VIDEO ==================
 if st.session_state.step >= 2:
     st.header("⚙️ 2. Render Video")
     if st.button("🚀 Mulai Render Otomatis"):
@@ -114,11 +114,10 @@ if st.session_state.step >= 2:
                     p = get_pexels_video(kw, pexels_key, output_filename=f"temp_video_{idx}.mp4")
                     v_paths.append(p)
 
-            # Tetap lanjut meskipun ada video yang None (akan di-handle di assemble_video)
-            with st.spinner("Membuat narasi suara..."):
+            with st.spinner("Membuat narasi suara AI..."):
                 aud_path = create_voiceover(st.session_state.voiceover_text, rate="-5%")
 
-            with st.spinner("Merakit video (highlight, subtitle, BGM)..."):
+            with st.spinner("Merakit video (highlight, subtitle & BGM)..."):
                 final_path = assemble_video(
                     video_paths=v_paths,
                     audio_path=aud_path,
@@ -130,18 +129,17 @@ if st.session_state.step >= 2:
                 if final_path:
                     st.session_state.final_video_path = final_path
                     st.session_state.step = 3
-                    st.success("Video selesai!")
+                    st.rerun()  # MEMUTUS BENTROKAN REACT DOM FRONTEND
                 else:
-                    st.error("Render gagal. Cek log untuk detail error.")
+                    st.error("Render gagal. Silakan periksa log server.")
 
-# ================== PREVIEW (DIPERBAIKI AGAR TIDAK KEBESARAN) ==================
+# ================== STEP 3: PREVIEW (LAYOUT HP RAMPING) ==================
 if st.session_state.step == 3 and st.session_state.final_video_path:
     st.header("📱 3. Preview")
-    
-    # Gunakan kolom agar video tidak memenuhi layar penuh
+
+    # Mencegah pemutar raksasa: col1 khusus seukuran area pink (300-350px)
     col1, col2 = st.columns([1, 2])
     with col1:
         st.video(st.session_state.final_video_path)
-        if st.button("📤 Share ke TikTok (Simulasi)"):
+        if st.button("📤 Share ke TikTok (Simulasi)", use_container_width=True):
             st.success("Berhasil dikirim ke TikTok!")
- 
