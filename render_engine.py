@@ -9,8 +9,7 @@ import textwrap
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from moviepy import (
-    VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip,
-    concatenate_videoclips
+    VideoFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
 )
 from moviepy.video.VideoClip import ColorClip
 
@@ -179,12 +178,13 @@ def create_overlay_video(video_paths, text_segments, total_duration, resolution=
     final_video = concatenate_videoclips(prepared_clips)
     return final_video
 
-# ================== 5. SUBTITLE ASS ==================
+# ================== 5. SUBTITLE ASS (untuk FFmpeg) ==================
 def create_ass_subtitle_file(text, total_duration, output_ass="subtitles.ass"):
     words = text.split()
     if not words:
         return None
 
+    # Bagi menjadi frasa (3-4 kata)
     frasa = []
     i = 0
     while i < len(words):
@@ -220,6 +220,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         clean_text = f_text.replace("{", "").replace("}", "")
         ass_content += f"Dialogue: 0,{t_start},{t_end},TikTokSub,,0,0,0,,{clean_text}\n"
 
+    # Pastikan direktori ada
+    os.makedirs(os.path.dirname(os.path.abspath(output_ass)) or '.', exist_ok=True)
     with open(output_ass, "w", encoding="utf-8") as f:
         f.write(ass_content)
 
@@ -239,7 +241,7 @@ def get_audio_duration(audio_path):
     except:
         return 60.0
 
-# ================== 7. ASSEMBLE VIDEO UTAMA ==================
+# ================== 7. ASSEMBLE VIDEO UTAMA (Direct FFmpeg) ==================
 def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
                    full_narration="", output_path="final_tiktok.mp4", resolution=(1080, 1920)):
     if not audio_path or not os.path.exists(audio_path):
@@ -253,40 +255,45 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
         total_duration = get_audio_duration(audio_path)
         logging.info(f"Durasi audio: {total_duration:.2f} detik")
 
-        # --- Buat video overlay highlight (MoviePy) ---
+        # --- STEP 1: Buat video overlay highlight (MoviePy) ---
         logging.info("Membuat video overlay highlight...")
-        temp_overlay = "temp_video_overlay.mp4"
+        temp_overlay = os.path.abspath("temp_video_overlay.mp4")
         overlay_clip = create_overlay_video(video_paths, text_segments, total_duration, resolution)
         overlay_clip.write_videofile(temp_overlay, fps=24, codec="libx264", preset="ultrafast",
                                      verbose=False, logger=None)
         overlay_clip.close()
         logging.info("Overlay video selesai")
 
-        # --- Buat subtitle ASS ---
+        # --- STEP 2: Buat file subtitle ASS ---
         ass_file = os.path.abspath("subtitles.ass")
         if full_narration and full_narration.strip():
             create_ass_subtitle_file(full_narration, total_duration, ass_file)
             logging.info("File subtitle ASS dibuat")
 
-        # --- Download BGM ---
+        # --- STEP 3: Download BGM (jika belum ada) ---
         bgm_path = os.path.abspath("temp_bgm.mp3")
         bgm_url = "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
         if not os.path.exists(bgm_path) or os.path.getsize(bgm_path) < 1000:
             try:
+                logging.info("Mengunduh BGM dari Pixabay...")
                 resp = requests.get(bgm_url, headers=headers, timeout=15)
                 if resp.status_code == 200:
                     with open(bgm_path, "wb") as f:
                         f.write(resp.content)
                     logging.info("BGM berhasil diunduh")
+                else:
+                    logging.warning(f"BGM download gagal: status {resp.status_code}")
             except Exception as e:
-                logging.warning(f"BGM download gagal: {e}")
+                logging.warning(f"BGM download error: {e}")
 
         has_bgm = os.path.exists(bgm_path) and os.path.getsize(bgm_path) > 1000
 
-        # --- Jalankan FFmpeg untuk subtitle + audio ---
+        # --- STEP 4: Jalankan FFmpeg untuk menggabungkan semuanya ---
+        # Escape path untuk filter subtitles (agar aman dengan tanda kutip)
         safe_ass = ass_file.replace(":", "\\:").replace("'", "'\\''")
+
         cmd = ["ffmpeg", "-y", "-i", temp_overlay, "-i", audio_path]
 
         if has_bgm:
@@ -308,7 +315,7 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
             output_path
         ]
 
-        logging.info("Menjalankan FFmpeg untuk subtitle dan BGM...")
+        logging.info("Menjalankan FFmpeg untuk perakitan final...")
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
         if result.returncode == 0 and os.path.exists(output_path):
@@ -317,9 +324,10 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
                 if os.path.exists(f):
                     try:
                         os.remove(f)
+                        logging.info(f"File sementara dihapus: {f}")
                     except:
                         pass
-            logging.info(f"✅ Video berhasil: {output_path}")
+            logging.info(f"✅ Video final berhasil: {output_path}")
             return output_path
         else:
             logging.error(f"FFmpeg error: {result.stderr}")
