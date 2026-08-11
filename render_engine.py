@@ -13,7 +13,6 @@ from moviepy import (
     CompositeAudioClip, concatenate_videoclips
 )
 
-# ================== KONFIGURASI ==================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
 
@@ -80,7 +79,10 @@ def safe_write_videofile(clip, *args, **kwargs):
 # ================== 1. PEXELS ==================
 def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
     url = f"https://api.pexels.com/videos/search?query={keyword}&per_page=1&orientation=portrait"
-    headers = {"Authorization": api_key}
+    headers = {
+        "Authorization": api_key,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
     try:
         logging.info(f"Mengunduh Pexels: {keyword}")
         response = requests.get(url, headers=headers, timeout=15).json()
@@ -90,9 +92,10 @@ def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
             return None
         video_files = videos[0].get("video_files", [])
         if not video_files:
+            logging.warning(f"Tidak ada video_files untuk '{keyword}'")
             return None
         video_url = next((v["link"] for v in video_files if v.get("width", 0) >= 720), video_files[0]["link"])
-        video_data = requests.get(video_url, timeout=20).content
+        video_data = requests.get(video_url, headers=headers, timeout=20).content
         with open(output_filename, "wb") as f:
             f.write(video_data)
         logging.info(f"Berhasil unduh {output_filename} ({len(video_data)//1024} KB)")
@@ -113,19 +116,13 @@ def create_voiceover(text, output_filename="temp_audio.mp3", rate="-5%"):
     logging.info(f"TTS selesai: {output_filename}")
     return output_filename
 
-# ================== 3. HIGHLIGHT + OVERLAY (Per Kata) ==================
+# ================== 3. TEKS HIGHLIGHT (SCENE OVERLAY) ==================
 def create_highlighted_text_image(text, size=(1080, 1920), font_size=52,
                                   base_color='white', highlight_color='#FFD700',
                                   stroke_color='black', stroke_width=6):
-    """
-    Membuat gambar teks dengan highlight pada kata yang diapit *...*
-    Contoh: "Dapatkan *10 Limpahan Rahmat* / HR. An-Nasa'i"
-    -> "10 Limpahan Rahmat" berwarna emas, sisanya putih.
-    """
     img = Image.new('RGBA', size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Load font
     font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
@@ -142,93 +139,49 @@ def create_highlighted_text_image(text, size=(1080, 1920), font_size=52,
     if font is None:
         font = ImageFont.load_default()
 
-    # Parsing segmen: split berdasarkan *...*
-    segments = []
-    pattern = r'\*(.*?)\*'
-    last_end = 0
-    for match in re.finditer(pattern, text):
-        if match.start() > last_end:
-            segments.append((text[last_end:match.start()], base_color))
-        segments.append((match.group(1), highlight_color))
-        last_end = match.end()
-    if last_end < len(text):
-        segments.append((text[last_end:], base_color))
-    if not segments:
-        segments = [(text, base_color)]
+    clean_text = text.replace('*', '')
+    wrapped = textwrap.wrap(clean_text, width=24)
+    if not wrapped:
+        wrapped = [clean_text]
 
-    # Pecah menjadi kata-kata dengan warna
-    words_with_colors = []
-    for seg_text, seg_color in segments:
-        for word in seg_text.split():
-            words_with_colors.append((word, seg_color))
-
-    # Bentuk baris (max 24 karakter)
-    lines = []
-    current_line = []
-    current_chars = 0
-    for word, color in words_with_colors:
-        word_len = len(word)
-        if current_chars + word_len + (1 if current_line else 0) <= 24:
-            current_line.append((word, color))
-            current_chars += word_len + (1 if current_line else 0)
-        else:
-            lines.append(current_line)
-            current_line = [(word, color)]
-            current_chars = word_len
-    if current_line:
-        lines.append(current_line)
-
-    # Ukur teks
-    def get_text_size(word, font):
-        try:
-            bbox = draw.textbbox((0, 0), word, font=font)
-            return bbox[2] - bbox[0], bbox[3] - bbox[1]
-        except AttributeError:
-            return draw.textsize(word, font=font)
-
-    line_height = font_size + 10
-    total_height = len(lines) * line_height
-    y_start = (size[1] - total_height) // 2
+    total_text_h = len(wrapped) * (font_size + 15)
+    y_start = (size[1] - total_text_h) // 2
 
     y = y_start
-    for line in lines:
-        total_width = 0
-        for word, _ in line:
-            w, _ = get_text_size(word, font)
-            total_width += w
-        total_width += (len(line) - 1) * (font_size // 3)
-        x = (size[0] - total_width) // 2
+    for line in wrapped:
+        try:
+            bbox = draw.textbbox((0, 0), line, font=font)
+            tw = bbox[2] - bbox[0]
+        except AttributeError:
+            tw, _ = draw.textsize(line, font=font)
+            
+        x = (size[0] - tw) // 2
 
-        for word, color in line:
-            w, h = get_text_size(word, font)
-            # Stroke
-            if stroke_width > 0:
-                for dx in range(-stroke_width, stroke_width+1):
-                    for dy in range(-stroke_width, stroke_width+1):
-                        if dx != 0 or dy != 0:
-                            draw.text((x+dx, y+dy), word, font=font, fill=stroke_color)
-            draw.text((x, y), word, font=font, fill=color)
-            x += w + font_size // 3
-        y += line_height
+        if stroke_width > 0:
+            for dx in range(-stroke_width, stroke_width+1):
+                for dy in range(-stroke_width, stroke_width+1):
+                    if dx != 0 or dy != 0:
+                        draw.text((x+dx, y+dy), line, font=font, fill=stroke_color)
+
+        line_color = highlight_color if ("*" in text or "HR." in line) else base_color
+        draw.text((x, y), line, font=font, fill=line_color)
+        y += font_size + 15
 
     return img
 
-# Fungsi kompatibilitas jika ada yang memanggil create_text_image
 def create_text_image(text, size=(1080, 1920)):
     return create_highlighted_text_image(text, size=size)
 
-# ================== 4. SUBTITLE PER FRASA ==================
+# ================== 4. SUBTITLE DINAMIS PER FRASA (AREA BAWAH) ==================
 def generate_subtitle_clips(text, total_duration, resolution=(1080, 1920),
-                            font_size=36, color='white', stroke_color='black', stroke_width=3):
+                            font_size=40, color='white', stroke_color='black', stroke_width=4):
     words = text.split()
     if not words:
         return []
     frasa = []
     i = 0
     while i < len(words):
-        num = min(5, len(words) - i)
-        if num > 3 and len(words) - i > 5:
-            num = 4 if i % 2 == 0 else 5
+        num = min(4, len(words) - i)
         frasa.append(' '.join(words[i:i+num]))
         i += num
 
@@ -263,7 +216,7 @@ def generate_subtitle_clips(text, total_duration, resolution=(1080, 1920),
                 tw, th = draw.textsize(frasa_text, font=font)
 
             x = (resolution[0] - tw) // 2
-            y = resolution[1] - int(resolution[1] * 0.15) - th
+            y = resolution[1] - 300  # Posisi subtitle bagian bawah
 
             if stroke_width > 0:
                 for dx in range(-stroke_width, stroke_width+1):
@@ -284,12 +237,6 @@ def generate_subtitle_clips(text, total_duration, resolution=(1080, 1920),
 # ================== 5. ASSEMBLE VIDEO UTAMA ==================
 def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
                    full_narration="", output_path="final_tiktok.mp4", resolution=(1080, 1920)):
-    """
-    video_paths: list path video dari Pexels (boleh berisi None)
-    audio_path: path file audio narasi
-    text_segments: list teks overlay (dengan *...* untuk highlight)
-    full_narration: teks narasi lengkap untuk subtitle (opsional)
-    """
     if not audio_path or not os.path.exists(audio_path):
         logging.error("Audio narasi tidak ditemukan!")
         return None
@@ -298,12 +245,10 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
         output_path = os.path.abspath(output_path)
         os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
 
-        # Audio narasi
         audio_clip = AudioFileClip(audio_path)
         total_duration = audio_clip.duration
         logging.info(f"Durasi audio: {total_duration:.2f} detik")
 
-        # ===== PROTEKSI FALLBACK VIDEO =====
         valid_vpaths = [p for p in video_paths if p and os.path.exists(p)]
         num_scenes = len(text_segments) if len(text_segments) > 0 else 3
         scene_duration = total_duration / max(num_scenes, 1)
@@ -311,31 +256,26 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
         prepared_clips = []
         for idx in range(num_scenes):
             vpath = video_paths[idx] if idx < len(video_paths) else None
-
-            # Ambil video yang valid
+            
             if vpath and os.path.exists(vpath):
                 clip = VideoFileClip(vpath)
             elif len(valid_vpaths) > 0:
                 clip = VideoFileClip(valid_vpaths[0])
             else:
-                # Jika semua video gagal, buat background gelap
                 from moviepy.video.VideoClip import ColorClip
                 clip = ColorClip(size=resolution, color=(20, 20, 30), duration=scene_duration)
                 logging.warning(f"Scene {idx+1} menggunakan ColorClip karena tidak ada video valid")
 
-            # Sesuaikan durasi
             if clip.duration < scene_duration:
                 reps = int(scene_duration / clip.duration) + 1
                 clip = concatenate_videoclips([clip] * reps)
             clip = safe_subclip(clip, 0, scene_duration)
 
-            # Resize & crop ke portrait
             clip = safe_resize(clip, height=resolution[1])
             if clip.w > resolution[0]:
                 clip = safe_crop(clip, x_center=clip.w/2, y_center=clip.h/2,
                                  width=resolution[0], height=resolution[1])
 
-            # Overlay dengan highlight
             current_text = text_segments[idx] if idx < len(text_segments) else ""
             if current_text.strip():
                 txt_img = create_highlighted_text_image(current_text, size=resolution)
@@ -347,29 +287,29 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
 
             prepared_clips.append(composite_scene)
 
-        # Gabungkan semua scene
-        logging.info("Menggabungkan scene video...")
         final_video = concatenate_videoclips(prepared_clips)
+        logging.info("Video scenes berhasil digabung")
 
-        # ===== SUBTITLE (jika ada narasi) =====
+        # ===== SUBTITLE DINAMIS =====
         if full_narration and full_narration.strip():
             try:
                 logging.info("Membuat subtitle per frasa...")
-                subtitle_clips = generate_subtitle_clips(full_narration, total_duration, resolution)
-                if subtitle_clips:
-                    final_video = CompositeVideoClip([final_video] + subtitle_clips)
-                    logging.info(f"{len(subtitle_clips)} subtitle berhasil ditambahkan")
-            except Exception as sub_err:
-                logging.warning(f"Subtitle gagal: {sub_err}, lanjut tanpa subtitle")
+                sub_clips = generate_subtitle_clips(full_narration, total_duration, resolution)
+                if sub_clips:
+                    final_video = CompositeVideoClip([final_video] + sub_clips)
+                    logging.info(f"{len(sub_clips)} subtitle berhasil ditambahkan")
+            except Exception as e:
+                logging.warning(f"Gagal menempelkan subtitle: {e}")
 
-        # ===== BGM =====
+        # ===== BGM DENGAN USER-AGENT =====
         try:
             bgm_path = "temp_bgm.mp3"
             bgm_url = "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
             if not os.path.exists(bgm_path):
                 logging.info("Mengunduh BGM dari Pixabay...")
-                bgm_bytes = requests.get(bgm_url, timeout=10).content
+                bgm_bytes = requests.get(bgm_url, headers=headers, timeout=15).content
                 with open(bgm_path, "wb") as f:
                     f.write(bgm_bytes)
                 logging.info("BGM berhasil diunduh")
@@ -379,7 +319,7 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
                 reps = int(total_duration / bgm_clip.duration) + 1
                 bgm_clip = concatenate_videoclips([bgm_clip] * reps)
             bgm_clip = safe_subclip(bgm_clip, 0, total_duration)
-
+            
             try:
                 bgm_clip = bgm_clip.volumex(0.15)
             except AttributeError:
@@ -409,6 +349,7 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
             if os.path.exists(f):
                 try:
                     os.remove(f)
+                    logging.info(f"Hapus {f}")
                 except:
                     pass
 
