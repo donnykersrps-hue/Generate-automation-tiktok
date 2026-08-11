@@ -9,7 +9,8 @@ import textwrap
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from moviepy import (
-    VideoFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
+    VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip,
+    concatenate_videoclips
 )
 from moviepy.video.VideoClip import ColorClip
 
@@ -49,7 +50,7 @@ def create_voiceover(text, output_filename="temp_audio.mp3", rate="-5%"):
     asyncio.run(generate_tts(text, output_filename, rate))
     return output_filename
 
-# ================== 3. HIGHLIGHT TEXT (untuk overlay) ==================
+# ================== 3. HIGHLIGHT TEXT (overlay) ==================
 def create_highlighted_text_image(text, size=(1080, 1920), font_size=52,
                                   base_color='white', highlight_color='#FFD700',
                                   stroke_color='black', stroke_width=6):
@@ -72,7 +73,7 @@ def create_highlighted_text_image(text, size=(1080, 1920), font_size=52,
     if font is None:
         font = ImageFont.load_default()
 
-    # Parsing highlight *...*
+    # Parsing *...* highlight
     segments = []
     pattern = r'\*(.*?)\*'
     last_end = 0
@@ -141,7 +142,7 @@ def create_highlighted_text_image(text, size=(1080, 1920), font_size=52,
 
     return img
 
-# ================== 4. BUAT VIDEO OVERLAY (tanpa audio) ==================
+# ================== 4. BUAT OVERLAY VIDEO (MoviePy) ==================
 def create_overlay_video(video_paths, text_segments, total_duration, resolution=(1080, 1920)):
     valid_vpath = next((p for p in video_paths if p and os.path.exists(p)), None)
     num_scenes = len(text_segments) if text_segments else 3
@@ -259,11 +260,13 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
         overlay_clip.write_videofile(temp_overlay, fps=24, codec="libx264", preset="ultrafast",
                                      verbose=False, logger=None)
         overlay_clip.close()
+        logging.info("Overlay video selesai")
 
         # --- Buat subtitle ASS ---
         ass_file = os.path.abspath("subtitles.ass")
         if full_narration and full_narration.strip():
             create_ass_subtitle_file(full_narration, total_duration, ass_file)
+            logging.info("File subtitle ASS dibuat")
 
         # --- Download BGM ---
         bgm_path = os.path.abspath("temp_bgm.mp3")
@@ -276,7 +279,7 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
                 if resp.status_code == 200:
                     with open(bgm_path, "wb") as f:
                         f.write(resp.content)
-                logging.info("BGM berhasil diunduh")
+                    logging.info("BGM berhasil diunduh")
             except Exception as e:
                 logging.warning(f"BGM download gagal: {e}")
 
@@ -316,7 +319,7 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
                         os.remove(f)
                     except:
                         pass
-            logging.info(f"Video berhasil: {output_path}")
+            logging.info(f"✅ Video berhasil: {output_path}")
             return output_path
         else:
             logging.error(f"FFmpeg error: {result.stderr}")
