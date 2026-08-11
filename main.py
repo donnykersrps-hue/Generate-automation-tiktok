@@ -1,10 +1,9 @@
 import streamlit as st
 import google.generativeai as genai
 import os
-import logging
 from render_engine import get_pexels_video, create_voiceover, assemble_video
 
-# ================== KONFIGURASI ==================
+# ================== CONFIG ==================
 st.set_page_config(page_title="AI TikTok Studio", layout="wide")
 st.title("🎬 AI-Powered TikTok Content Studio")
 st.markdown("Otomatiskan pembuatan konten dari teks ke video hanya dengan satu klik.")
@@ -70,7 +69,7 @@ if st.button("✨ Generate Naskah & Visual Plan"):
             Berikan format jawaban PERSIS seperti ini (tanpa awalan/akhiran lain):
             VOICEOVER: [Teks narasi lengkap bahasa Indonesia 130-160 kata yang dibaca penuh penjiwaan]
             KEYWORDS: [Keyword 1] | [Keyword 2] | [Keyword 3]
-            AUDIO_BGM: [Deskripsi kata kunci musik instrumen syahdu, contoh: peaceful acoustic piano emotional violin ambient sound]
+            AUDIO_BGM: [Deskripsi kata kunci musik instrumen syahdu]
             OVERLAY_1: [Frasa ringkas max 4 kata Poin 1 + Tag *Highlight*] / [Nomor Hadits]
             OVERLAY_2: [Frasa ringkas max 4 kata Poin 2 + Tag *Highlight*] / [Nomor Hadits]
             OVERLAY_3: [Frasa ringkas max 4 kata Poin 3 + Tag *Highlight*] / [Nomor Hadits]
@@ -80,7 +79,6 @@ if st.button("✨ Generate Naskah & Visual Plan"):
             raw_text = response.text
 
             try:
-                # Parsing
                 vo = raw_text.split("VOICEOVER:")[1].split("KEYWORDS:")[0].strip()
                 kw_str = raw_text.split("KEYWORDS:")[1].split("AUDIO_BGM:")[0].strip()
                 bgm = raw_text.split("AUDIO_BGM:")[1].split("OVERLAY_1:")[0].strip()
@@ -91,16 +89,11 @@ if st.button("✨ Generate Naskah & Visual Plan"):
                 keywords = [k.strip() for k in kw_str.split("|")]
                 segments = [ov1, ov2, ov3]
 
-                # Simpan ke session state
                 st.session_state.voiceover_text = vo
                 st.session_state.keywords_list = keywords
                 st.session_state.text_segments = segments
                 st.session_state.bgm_description = bgm
                 st.session_state.step = 2
-
-                # === INI YANG PENTING: SIMPAN NARASI KE FILE ===
-                with open("/tmp/narasi_text.txt", "w") as f:
-                    f.write(vo)
 
                 st.success("Naskah berhasil dibuat!")
                 st.info(f"**Narasi:** {vo[:200]}...\n\n**Visual:** {keywords}\n\n**BGM:** {bgm}\n\n**Overlay:**\n1. {ov1}\n2. {ov2}\n3. {ov3}")
@@ -121,27 +114,25 @@ if st.session_state.step >= 2:
                     p = get_pexels_video(kw, pexels_key, output_filename=f"temp_video_{idx}.mp4")
                     v_paths.append(p)
 
-            if any(v_paths):
-                with st.spinner("Membuat narasi suara..."):
-                    aud_path = create_voiceover(st.session_state.voiceover_text, rate="-5%")
+            # Tetap lanjut meskipun ada video yang None (akan di-handle di assemble_video)
+            with st.spinner("Membuat narasi suara..."):
+                aud_path = create_voiceover(st.session_state.voiceover_text, rate="-5%")
 
-                with st.spinner("Merakit video (highlight, subtitle, BGM)..."):
-                    # === PANGGIL assemble_video DENGAN PARAMETER YANG BENAR ===
-                    final_path = assemble_video(
-                        video_paths=v_paths,
-                        audio_path=aud_path,
-                        text_segments=st.session_state.text_segments,
-                        bgm_description=st.session_state.bgm_description
-                    )
+            with st.spinner("Merakit video (highlight, subtitle, BGM)..."):
+                final_path = assemble_video(
+                    video_paths=v_paths,
+                    audio_path=aud_path,
+                    text_segments=st.session_state.text_segments,
+                    bgm_description=st.session_state.bgm_description,
+                    full_narration=st.session_state.voiceover_text  # <- untuk subtitle
+                )
 
-                    if final_path:
-                        st.session_state.final_video_path = final_path
-                        st.session_state.step = 3
-                        st.success("Video selesai!")
-                    else:
-                        st.error("Render gagal.")
-            else:
-                st.error("Gagal mengunduh video Pexels.")
+                if final_path:
+                    st.session_state.final_video_path = final_path
+                    st.session_state.step = 3
+                    st.success("Video selesai!")
+                else:
+                    st.error("Render gagal. Cek log untuk detail error.")
 
 # ================== PREVIEW ==================
 if st.session_state.step == 3 and st.session_state.final_video_path:
