@@ -13,6 +13,7 @@ from moviepy import (
     VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip,
     CompositeAudioClip, concatenate_videoclips
 )
+from moviepy.video.VideoClip import ColorClip  # untuk fallback
 
 # ================== KONFIGURASI ==================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -103,15 +104,16 @@ def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
             return None
         video_files = videos[0].get("video_files", [])
         if not video_files:
+            logging.warning(f"Tidak ada video_files untuk '{keyword}'")
             return None
         video_url = next((v["link"] for v in video_files if v.get("width", 0) >= 720), video_files[0]["link"])
-        video_data = requests.get(video_url).content
+        video_data = requests.get(video_url, timeout=15).content
         with open(output_filename, "wb") as f:
             f.write(video_data)
         logging.info(f"Berhasil unduh {output_filename} ({len(video_data)//1024} KB)")
         return output_filename
     except Exception as e:
-        logging.error(f"Error Pexels: {e}")
+        logging.error(f"Error Pexels untuk '{keyword}': {e}")
         return None
 
 # ================== 2. TTS ==================
@@ -126,7 +128,7 @@ def create_voiceover(text, output_filename="temp_audio.mp3", rate="-5%"):
     logging.info(f"TTS selesai: {output_filename}")
     return output_filename
 
-# ================== 3. HIGHLIGHT + OVERLAY (fungsi yang dipanggil) ==================
+# ================== 3. HIGHLIGHT + OVERLAY ==================
 def create_highlighted_text_image(text, size=(1080, 1920), font_size=52,
                                   base_color='white', highlight_color='#FFD700',
                                   stroke_color='black', stroke_width=6):
@@ -288,7 +290,7 @@ def get_bgm_from_description(description):
     # Sementara pakai fallback Pixabay
     return "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"
 
-# ================== 6. ASSEMBLE VIDEO ==================
+# ================== 6. ASSEMBLE VIDEO (DENGAN PERBAIKAN FALLBACK) ==================
 def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
                    output_path="final_tiktok.mp4", resolution=(1080, 1920)):
     write_status("processing", "Memulai rendering...", 0)
@@ -329,29 +331,33 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
             write_status("processing", f"Scene {idx+1}...", progress)
             logging.info(f"Memproses scene {idx+1}: {vpath}")
 
+            # --- PERBAIKAN FALLBACK VIDEO ---
+            # Cari video valid pertama dari daftar video_paths
+            valid_file = next((p for p in video_paths if p and os.path.exists(p)), None)
+
             if vpath and os.path.exists(vpath):
                 clip = VideoFileClip(vpath)
-                if clip.duration < scene_duration:
-                    reps = int(scene_duration / clip.duration) + 1
-                    clip = concatenate_videoclips([clip] * reps)
-                clip = safe_subclip(clip, 0, scene_duration)
+            elif valid_file:
+                clip = VideoFileClip(valid_file)
+                logging.info(f"Scene {idx+1} menggunakan fallback video: {valid_file}")
             else:
-                fallback = video_paths[0] if (video_paths[0] and os.path.exists(video_paths[0])) else None
-                if fallback:
-                    clip = VideoFileClip(fallback)
-                    clip = safe_subclip(clip, 0, scene_duration)
-                else:
-                    err = "Tidak ada video valid"
-                    logging.error(err)
-                    write_status("failed", err, progress, error=err)
-                    return None
+                # Jika tidak ada video sama sekali, buat ColorClip gelap
+                logging.warning(f"Scene {idx+1}: tidak ada video valid, buat ColorClip fallback")
+                clip = ColorClip(size=resolution, color=(20, 20, 30), duration=scene_duration)
 
+            # Pastikan durasi clip sesuai scene_duration
+            if clip.duration < scene_duration:
+                reps = int(scene_duration / clip.duration) + 1
+                clip = concatenate_videoclips([clip] * reps)
+            clip = safe_subclip(clip, 0, scene_duration)
+
+            # Resize dan crop
             clip = safe_resize(clip, height=resolution[1])
             if clip.w > resolution[0]:
                 clip = safe_crop(clip, x_center=clip.w/2, y_center=clip.h/2,
                                  width=resolution[0], height=resolution[1])
 
-            # OVERLAY dengan HIGHLIGHT (panggil fungsi yang benar)
+            # OVERLAY dengan HIGHLIGHT
             current_text = text_segments[idx] if idx < len(text_segments) else ""
             if current_text.strip():
                 txt_img = create_highlighted_text_image(current_text, size=resolution)
