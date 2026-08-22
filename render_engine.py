@@ -55,7 +55,8 @@ def get_media_duration(media_path):
     except Exception:
         return 5.0
 
-def wrap_text(text, max_chars=28):
+def wrap_text(text, max_chars=18):
+    """Mencegah teks font besar terpotong di samping layar HP 1080px"""
     if not text:
         return ""
     words = text.split()
@@ -84,11 +85,11 @@ def format_ass_time(seconds):
     cs = int((seconds - int(seconds)) * 100)
     return f"{hrs}:{mins:02d}:{secs:02d}.{cs:02d}"
 
-# ================== 4. GENERATOR SUBTITLE KARAOKE 4-ZONA ==================
+# ================== 4. GENERATOR SUBTITLE JUMBO 4-ZONA ==================
 def create_ass_for_slide(slide_data, duration, output_ass="slide_sub.ass"):
-    title = wrap_text(slide_data.get("title", "").upper(), max_chars=26)
-    main_text = wrap_text(slide_data.get("main_text", ""), max_chars=32)
-    highlight = wrap_text(slide_data.get("highlight", ""), max_chars=28)
+    title = wrap_text(slide_data.get("title", "").upper(), max_chars=16)
+    main_text = wrap_text(slide_data.get("main_text", ""), max_chars=20)
+    highlight = wrap_text(slide_data.get("highlight", ""), max_chars=16)
     source = slide_data.get("source", "")
     vo_script = slide_data.get("vo_script", "")
     text_color_hex = slide_data.get("text_color", "#FFFF00").replace("#", "")
@@ -109,24 +110,24 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Zona1Header,DejaVu Sans,40,&H0000D7FF&,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,50,50,1620,1
-Style: Zona2Highlight,DejaVu Sans,44,{ass_color},&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,60,60,1250,1
-Style: Zona3MainBody,DejaVu Sans,32,&H00FFFFFF&,&H00000000,&H00000000,&H60000000,0,0,0,0,100,100,0,0,1,3,0,5,80,80,820,1
-Style: Zona3Source,DejaVu Sans,28,&H0000FFFF&,&H00000000,&H00000000,&H60000000,0,1,0,0,100,100,0,0,1,2,0,5,50,50,700,1
+Style: Zona1Header,DejaVu Sans,60,&H0000D7FF&,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,50,50,1620,1
+Style: Zona2Highlight,DejaVu Sans,68,{ass_color},&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,60,60,1250,1
+Style: Zona3MainBody,DejaVu Sans,48,&H00FFFFFF&,&H00000000,&H00000000,&H60000000,0,0,0,0,100,100,0,0,1,3,0,5,80,80,820,1
+Style: Zona3Source,DejaVu Sans,36,&H0000FFFF&,&H00000000,&H00000000,&H60000000,0,1,0,0,100,100,0,0,1,2,0,5,50,50,680,1
 Style: Zona4SubTTS,DejaVu Sans,44,&H0000FFFF&,&H00FF00FF&,&H00000000,&HA0000000,1,0,0,0,100,100,0,0,1,3,0,2,60,60,260,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    # ZONA 1: Header Statis (Top - Renggang)
+    # ZONA 1: Header Statis Jumbo (Top)
     if title:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona1Header,,0,0,0,,{title}\n"
 
-    # ZONA 2: Highlight Utama (Upper Middle)
+    # ZONA 2: Highlight Utama Jumbo (Upper Middle)
     if highlight:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona2Highlight,,0,0,0,,{highlight}\n"
 
-    # ZONA 3: Main Text & Source (Lower Middle - Renggang)
+    # ZONA 3: Main Text & Source Jumbo (Lower Middle)
     if main_text:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona3MainBody,,0,0,0,,{main_text}\n"
     if source:
@@ -149,7 +150,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             t_start = format_ass_time(t_start_sec)
             t_end = format_ass_time(t_end_sec)
 
-            # Hitung alokasi waktu karaoke per kata (centiseconds)
             chunk_duration_cs = int((t_end_sec - t_start_sec) * 100)
             cs_per_word = max(10, chunk_duration_cs // max(len(chunk_words), 1))
 
@@ -160,7 +160,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         f.write(ass_content)
     return output_ass
 
-# ================== 5. ASSEMBLE MULTI-SLIDE VIDEO ==================
+# ================== 5. ASSEMBLE MULTI-SLIDE VIDEO (STABLE 30FPS) ==================
 def assemble_video(slides_data, pexels_key, bgm_description="", output_path="final_tiktok.mp4"):
     if not slides_data:
         logging.error("Tidak ada data slide untuk dirender.")
@@ -169,7 +169,7 @@ def assemble_video(slides_data, pexels_key, bgm_description="", output_path="fin
     rendered_slide_clips = []
     
     try:
-        # Loop Render Per Slide
+        # Loop Render Per Slide (Frame-Accurate & Smooth CFR 30fps)
         for idx, slide in enumerate(slides_data):
             slide_id = slide.get("slide_id", idx + 1)
             vo_script = slide.get("vo_script", "")
@@ -189,7 +189,7 @@ def assemble_video(slides_data, pexels_key, bgm_description="", output_path="fin
             create_ass_for_slide(slide, slide_duration, slide_ass_path)
             safe_ass = os.path.abspath(slide_ass_path).replace(":", "\\:").replace("'", "'\\''")
             
-            # D. Render Single Slide MP4
+            # D. Render Single Slide MP4 dengan Forced 30FPS CFR (Anti-Delay & Anti-Freeze)
             slide_out_path = f"slide_rendered_{slide_id}.mp4"
             
             if v_path and os.path.exists(v_path):
@@ -202,6 +202,7 @@ def assemble_video(slides_data, pexels_key, bgm_description="", output_path="fin
             cmd_slide = ["ffmpeg", "-y"] + input_bg + [
                 "-i", slide_audio_path,
                 "-vf", vf_filter,
+                "-r", "30", "-vsync", "cfr", # Force Constant Frame Rate 30FPS
                 "-map", "0:v", "-map", "1:a",
                 "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
                 "-c:a", "aac", "-b:a", "128k",
