@@ -11,7 +11,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS Dark Theme Midnight Syahdu & Neon Interactive Buttons
+# Custom CSS Dark Theme Midnight Syahdu & Neon Interactive Glows
 css_code = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
@@ -44,14 +44,20 @@ css_code = """
         border-radius: 14px;
         border: 1px solid rgba(56, 189, 248, 0.2) !important;
         color: #F8FAFC !important;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
     }
 
-    /* Interaksi Neon Ungu saat Dropdown (Expander) Disentuh Kursor */
+    /* Interaksi Full-Body Neon Ungu saat Dropdown (Expander) Disentuh Kursor */
     div[data-testid="stExpander"]:hover {
+        background: linear-gradient(135deg, #2E1065 0%, #1E1B4B 100%) !important;
         border-color: #C084FC !important;
-        box-shadow: 0 0 22px rgba(192, 132, 252, 0.6), inset 0 0 10px rgba(168, 85, 247, 0.2) !important;
+        box-shadow: 0 0 25px rgba(192, 132, 252, 0.65), inset 0 0 15px rgba(168, 85, 247, 0.3) !important;
         transform: translateY(-2px);
+    }
+
+    /* Memastikan Bagian Dalam Expander (Header & Body Content) Ikut Berubah Warna */
+    div[data-testid="stExpander"]:hover * {
+        color: #F3E8FF !important;
     }
 
     /* Tombol Interaksi Neon Glowing */
@@ -228,7 +234,6 @@ if st.button("🚀 Mulai Render Otomatis"):
 # ================== 6. STEP 3: PREVIEW RESULT (30% COMPACT VIEWPORT) ==================
 if "rendered_video" in st.session_state and os.path.exists(st.session_state.rendered_video):
     st.header("📱 3. Preview Video Result")
-    # Menggunakan Layout Kolom [1.1, 1, 1.1] untuk Mengunci Ukuran Video di ~30%
     col_left, col_video, col_right = st.columns([1.1, 1, 1.1])
     with col_video:
         st.video(st.session_state.rendered_video)
