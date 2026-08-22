@@ -64,7 +64,6 @@ def get_media_duration(media_path):
         return 5.0
 
 def wrap_text(text, max_chars=18):
-    """Mencegah teks font besar terpotong di samping layar HP 1080px"""
     if not text:
         return ""
     words = text.split()
@@ -93,7 +92,7 @@ def format_ass_time(seconds):
     cs = int((seconds - int(seconds)) * 100)
     return f"{hrs}:{mins:02d}:{secs:02d}.{cs:02d}"
 
-# ================== 4. GENERATOR SUBTITLE REAL-TIMING 4-ZONA ==================
+# ================== 4. GENERATOR SUBTITLE PRECISE TIMING 4-ZONA ==================
 def create_ass_for_slide(slide_data, duration, submaker, output_ass="slide_sub.ass"):
     title = wrap_text(slide_data.get("title", "").upper(), max_chars=16)
     main_text = wrap_text(slide_data.get("main_text", ""), max_chars=20)
@@ -126,50 +125,62 @@ Style: Zona4SubTTS,DejaVu Sans,44,&H0000FFFF&,&H00FF00FF&,&H00000000,&HA0000000,
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    # ZONA 1: Header Statis Jumbo
+    # ZONA 1: Header Statis
     if title:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona1Header,,0,0,0,,{title}\n"
 
-    # ZONA 2: Highlight Utama Jumbo
+    # ZONA 2: Highlight Utama
     if highlight:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona2Highlight,,0,0,0,,{highlight}\n"
 
-    # ZONA 3: Main Text & Source Jumbo
+    # ZONA 3: Main Text & Source
     if main_text:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona3MainBody,,0,0,0,,{main_text}\n"
     if source:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona3Source,,0,0,0,,{source}\n"
 
-    # ZONA 4: Subtitle Dinamis Karaoke (Boundary Real-Time Synchronization)
+    # ZONA 4: Subtitle Dinamis Karaoke (Perhitungan Offset Relatif & Jeda Napas Vokal)
     if submaker and hasattr(submaker, 'subs') and submaker.subs:
-        # Mengelompokkan kata per kata dari SubMaker ke dalam frasa 3-4 kata
-        current_chunk = []
-        chunk_start = None
-        
+        words_data = []
         for sub in submaker.subs:
-            # Parse timing dari SubMaker VTT
-            start_sec = sub.start.total_seconds()
-            end_sec = sub.end.total_seconds()
-            word = sub.text.strip()
+            words_data.append({
+                'word': sub.text.strip(),
+                'start': sub.start.total_seconds(),
+                'end': sub.end.total_seconds()
+            })
 
-            if not current_chunk:
-                chunk_start = start_sec
+        # Kelompokkan kata per frasa (maksimal 4 kata per frasa)
+        chunks = []
+        i = 0
+        while i < len(words_data):
+            chunks.append(words_data[i:i+4])
+            i += 4
 
-            dur_cs = int((end_sec - start_sec) * 100)
-            current_chunk.append(f"{{\\kf{max(5, dur_cs)}}}{word}")
-
-            if len(current_chunk) >= 4:
-                t_s = format_ass_time(chunk_start)
-                t_e = format_ass_time(end_sec)
-                k_text = " ".join(current_chunk)
-                ass_content += f"Dialogue: 2,{t_s},{t_e},Zona4SubTTS,,0,0,0,,{k_text}\n"
-                current_chunk = []
-                chunk_start = None
-
-        if current_chunk:
+        for chunk in chunks:
+            chunk_start = chunk[0]['start']
+            chunk_end = chunk[-1]['end']
+            
             t_s = format_ass_time(chunk_start)
-            t_e = format_ass_time(duration)
-            k_text = " ".join(current_chunk)
+            t_e = format_ass_time(chunk_end)
+            
+            k_tokens = []
+            last_time = chunk_start
+            
+            for item in chunk:
+                # Sisipkan Tag Silence (Jeda) jika ada jarak napas antar kata
+                silence_duration = item['start'] - last_time
+                if silence_duration > 0.02:
+                    silence_cs = int(silence_duration * 100)
+                    k_tokens.append(f"{{\\kf{silence_cs}}}")
+                
+                # Hitung durasi pengucapan kata asli (centiseconds)
+                word_dur_cs = int((item['end'] - item['start']) * 100)
+                word_dur_cs = max(5, word_dur_cs)
+                k_tokens.append(f"{{\\kf{word_dur_cs}}}{item['word']}")
+                
+                last_time = item['end']
+            
+            k_text = " ".join(k_tokens)
             ass_content += f"Dialogue: 2,{t_s},{t_e},Zona4SubTTS,,0,0,0,,{k_text}\n"
 
     with open(output_ass, "w", encoding="utf-8") as f:
@@ -185,27 +196,27 @@ def assemble_video(slides_data, pexels_key, bgm_description="", output_path="fin
     rendered_slide_clips = []
     
     try:
-        # Loop Render Per Slide (Frame-Exact Real-Sync & Normalization)
+        # Loop Render Per Slide
         for idx, slide in enumerate(slides_data):
             slide_id = slide.get("slide_id", idx + 1)
             vo_script = slide.get("vo_script", "")
             bg_kw = slide.get("bg_keyword", "cinematic nature")
             
-            # A. Voiceover & Real Word Boundary Extraction
+            # A. Voiceover & Sync Extraction
             slide_audio_path = f"temp_vo_{slide_id}.mp3"
             submaker = create_voiceover_with_sync(vo_script, slide_audio_path)
             slide_duration = get_media_duration(slide_audio_path)
             
-            # B. Background Video Download
+            # B. Background Video
             slide_raw_video = f"temp_bg_{slide_id}.mp4"
             v_path = get_pexels_video(bg_kw, pexels_key, output_filename=slide_raw_video)
             
-            # C. Subtitle ASS Real-Sync Slide
+            # C. Subtitle ASS Slide
             slide_ass_path = f"temp_sub_{slide_id}.ass"
             create_ass_for_slide(slide, slide_duration, submaker, slide_ass_path)
             safe_ass = os.path.abspath(slide_ass_path).replace(":", "\\:").replace("'", "'\\''")
             
-            # D. Render Single Slide dengan Keyframe Normalization (GOP=30 & CFR=30)
+            # D. Render Single Slide (CFR 30FPS & Keyframe Interval)
             slide_out_path = f"slide_rendered_{slide_id}.mp4"
             
             if v_path and os.path.exists(v_path):
@@ -219,7 +230,7 @@ def assemble_video(slides_data, pexels_key, bgm_description="", output_path="fin
                 "-i", slide_audio_path,
                 "-vf", vf_filter,
                 "-r", "30", "-vsync", "cfr",
-                "-g", "30", "-keyint_min", "30",  # Normalisasi Keyframe Tiap 1 Detik
+                "-g", "30", "-keyint_min", "30",
                 "-map", "0:v", "-map", "1:a",
                 "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
                 "-c:a", "aac", "-b:a", "128k",
@@ -229,7 +240,7 @@ def assemble_video(slides_data, pexels_key, bgm_description="", output_path="fin
             
             subprocess.run(cmd_slide, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-            # PRE-FLIGHT AUDIT 1: Verifikasi Integritas Klip Slide
+            # PRE-FLIGHT AUDIT: Integrity Check
             if os.path.exists(slide_out_path) and os.path.getsize(slide_out_path) > 1000:
                 rendered_dur = get_media_duration(slide_out_path)
                 if abs(rendered_dur - slide_duration) <= 0.2:
@@ -241,7 +252,7 @@ def assemble_video(slides_data, pexels_key, bgm_description="", output_path="fin
             else:
                 logging.error(f"❌ Slide {slide_id} Gagal Render!")
 
-        # E. Concatenate All Verified Slides
+        # E. Concatenate All Slides
         concat_list_path = "concat_list.txt"
         with open(concat_list_path, "w") as f:
             for clip in rendered_slide_clips:
@@ -256,11 +267,6 @@ def assemble_video(slides_data, pexels_key, bgm_description="", output_path="fin
             temp_concat_video
         ]
         subprocess.run(cmd_concat, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-        # PRE-FLIGHT AUDIT 2: Verifikasi File Concat Sebelum BGM
-        if not os.path.exists(temp_concat_video) or os.path.getsize(temp_concat_video) < 5000:
-            logging.error("❌ Pre-Flight Audit Gagal pada tahap Concat Video!")
-            return None
 
         # F. Inject Audio BGM (Volume 25%)
         bgm_path = os.path.abspath("temp_bgm.mp3")
@@ -298,7 +304,6 @@ def assemble_video(slides_data, pexels_key, bgm_description="", output_path="fin
 
         subprocess.run(cmd_final, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-        # PRE-FLIGHT AUDIT 3: Verifikasi File Final
         if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
             logging.info(f"✅ Video Multi-Slide Lolos Audit Final: {output_path}")
             return output_path
