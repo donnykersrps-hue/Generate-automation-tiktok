@@ -4,10 +4,11 @@ import asyncio
 import edge_tts
 import logging
 import subprocess
+from PIL import Image, ImageDraw, ImageFont
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# ================== 1. PEXELS API ==================
+# ================== 1. PEXELS API ENGINE ==================
 def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
     url = f"https://api.pexels.com/videos/search?query={keyword}&per_page=1&orientation=portrait"
     headers = {
@@ -28,10 +29,10 @@ def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
             f.write(video_data)
         return output_filename
     except Exception as e:
-        logging.error(f"Error Pexels: {e}")
+        logging.error(f"Error Pexels for keyword '{keyword}': {e}")
         return None
 
-# ================== 2. EDGE TTS ==================
+# ================== 2. EDGE TTS PER SLIDE ==================
 async def generate_tts(text, output_filename="temp_audio.mp3", rate="-5%"):
     voice = "id-ID-ArdiNeural"
     communicate = edge_tts.Communicate(text, voice, rate=rate)
@@ -41,101 +42,130 @@ def create_voiceover(text, output_filename="temp_audio.mp3", rate="-5%"):
     asyncio.run(generate_tts(text, output_filename, rate))
     return output_filename
 
-# ================== 3. GENERATOR SUBTITLE ASS (AI COLOR PRESETS) ==================
-def create_ass_subtitle_file(text, total_duration, text_segments=None, output_ass="subtitles.ass"):
-    """
-    Inisiatif AI Color Presets:
-    - Header Center: Emas Mewah (&H00D7FF&) + Outline Hitam
-    - Subtitle Bottom: Soft Cream (&H00DCF8FF&) Nyaman di Mata (MarginV 240)
-    """
-    ass_content = """[Script Info]
+# ================== 3. HELPER DURASI MEDIA (FFPROBE) ==================
+def get_media_duration(media_path):
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        media_path
+    ]
+    try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        return float(result.stdout.strip())
+    except Exception:
+        return 5.0
+
+# ================== 4. GENERATOR SUBTITLE ASS PER SLIDE ==================
+def create_ass_for_slide(slide_data, duration, output_ass="slide_sub.ass"):
+    title = slide_data.get("title", "").upper()
+    main_text = slide_data.get("main_text", "")
+    highlight = slide_data.get("highlight", "")
+    source = slide_data.get("source", "")
+    text_color_hex = slide_data.get("text_color", "#FFFF00").replace("#", "")
+
+    # Convert Hex to ASS Color (&HBBGGRR&)
+    if len(text_color_hex) == 6:
+        r, g, b = text_color_hex[0:2], text_color_hex[2:4], text_color_hex[4:6]
+        ass_color = f"&H00{b}{g}{r}&"
+    else:
+        ass_color = "&H0000FFFF&"  # Fallback Cyan
+
+    ass_content = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
 PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: TikTokHeaderCenter,DejaVu Sans,60,&H00D7FF&,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,5,0,5,50,50,0,1
-Style: TikTokSubSoft,DejaVu Sans,48,&H00DCF8FF&,&H00000000,&H00000000,&H60000000,1,0,0,0,100,100,0,0,1,3,0,2,60,60,240,1
+Style: HeaderTitle,DejaVu Sans,55,&H0000D7FF&,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,50,50,1400,1
+Style: MainHighlight,{ass_color},DejaVu Sans,50,{ass_color},&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,60,60,1100,1
+Style: SubBody,DejaVu Sans,42,&H00FFFFFF&,&H00000000,&H00000000,&H60000000,0,0,0,0,100,100,0,0,1,3,0,5,80,80,750,1
+Style: SourceFooter,DejaVu Sans,36,&H0000FFFF&,&H00000000,&H00000000,&H60000000,0,1,0,0,100,100,0,0,1,2,0,5,50,50,450,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 2,0:00:00.00,0:{int(duration//60):02d}:{duration%60:05.2f},HeaderTitle,,0,0,0,,{title}
+Dialogue: 2,0:00:00.00,0:{int(duration//60):02d}:{duration%60:05.2f},MainHighlight,,0,0,0,,{highlight}
+Dialogue: 1,0:00:00.00,0:{int(duration//60):02d}:{duration%60:05.2f},SubBody,,0,0,0,,{main_text}
 """
+    if source:
+        ass_content += f"Dialogue: 1,0:00:00.00,0:{int(duration//60):02d}:{duration%60:05.2f},SourceFooter,,0,0,0,,{source}\n"
 
-    def format_ass_time(seconds):
-        hrs = int(seconds // 3600)
-        mins = int((seconds % 3600) // 60)
-        secs = int(seconds % 60)
-        cs = int((seconds - int(seconds)) * 100)
-        return f"{hrs}:{mins:02d}:{secs:02d}.{cs:02d}"
-
-    # A. Header Poin Utama (Emas Mewah di Tengah)
-    if text_segments:
-        num_scenes = len(text_segments)
-        scene_duration = total_duration / max(num_scenes, 1)
-        for idx, seg_text in enumerate(text_segments):
-            if seg_text.strip():
-                t_start = format_ass_time(idx * scene_duration)
-                t_end = format_ass_time((idx + 1) * scene_duration)
-                clean_header = seg_text.replace("*", "").replace("{", "").replace("}", "")
-                ass_content += f"Dialogue: 1,{t_start},{t_end},TikTokHeaderCenter,,0,0,0,,{clean_header}\n"
-
-    # B. Subtitle Dinamis (Soft Cream di Bawah, Frasa 3-4 Kata)
-    words = text.split()
-    if words:
-        frasa = []
-        i = 0
-        while i < len(words):
-            num = min(4, len(words) - i)
-            frasa.append(' '.join(words[i:i+num]))
-            i += num
-
-        durasi_per_frasa = total_duration / max(len(frasa), 1)
-        for idx, f_text in enumerate(frasa):
-            t_start = format_ass_time(idx * durasi_per_frasa)
-            t_end = format_ass_time((idx + 1) * durasi_per_frasa)
-            clean_text = f_text.replace("{", "").replace("}", "")
-            ass_content += f"Dialogue: 0,{t_start},{t_end},TikTokSubSoft,,0,0,0,,{clean_text}\n"
-
-    os.makedirs(os.path.dirname(os.path.abspath(output_ass)) or '.', exist_ok=True)
     with open(output_ass, "w", encoding="utf-8") as f:
         f.write(ass_content)
-
     return output_ass
 
-# ================== 4. DURASI AUDIO (FFPROBE) ==================
-def get_audio_duration(audio_path):
-    cmd = [
-        "ffprobe", "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
-        audio_path
-    ]
-    try:
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        return float(result.stdout.strip())
-    except Exception:
-        return 60.0
-
-# ================== 5. ASSEMBLE VIDEO UTAMA (DIRECT FFMPEG) ==================
-def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
-                   full_narration="", output_path="final_tiktok.mp4", resolution=(1080, 1920)):
-    if not audio_path or not os.path.exists(audio_path):
-        logging.error("Audio narasi tidak ditemukan")
+# ================== 5. ASSEMBLE MULTI-SLIDE VIDEO ==================
+def assemble_video(slides_data, pexels_key, bgm_description="", output_path="final_tiktok.mp4"):
+    if not slides_data:
+        logging.error("Tidak ada data slide untuk dirender.")
         return None
 
+    rendered_slide_clips = []
+    
     try:
-        output_path = os.path.abspath(output_path)
-        os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+        # Loop Renders Per Slide (Frame-Accurate Audio-Visual Sync)
+        for idx, slide in enumerate(slides_data):
+            slide_id = slide.get("slide_id", idx + 1)
+            vo_script = slide.get("vo_script", "")
+            bg_kw = slide.get("bg_keyword", "cinematic nature")
+            
+            # A. Generate Voiceover Slide
+            slide_audio_path = f"temp_vo_{slide_id}.mp3"
+            create_voiceover(vo_script, slide_audio_path)
+            slide_duration = get_media_duration(slide_audio_path)
+            
+            # B. Get Background Video
+            slide_raw_video = f"temp_bg_{slide_id}.mp4"
+            v_path = get_pexels_video(bg_kw, pexels_key, output_filename=slide_raw_video)
+            
+            # C. Create Subtitle ASS Slide
+            slide_ass_path = f"temp_sub_{slide_id}.ass"
+            create_ass_for_slide(slide, slide_duration, slide_ass_path)
+            safe_ass = os.path.abspath(slide_ass_path).replace(":", "\\:").replace("'", "'\\''")
+            
+            # D. Render Individual Slide MP4
+            slide_out_path = f"slide_rendered_{slide_id}.mp4"
+            
+            if v_path and os.path.exists(v_path):
+                input_bg = ["-stream_loop", "-1", "-i", v_path]
+                vf_filter = f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,subtitles='{safe_ass}'"
+            else:
+                input_bg = ["-f", "lavfi", "-i", "color=c=black:s=1080x1920"]
+                vf_filter = f"subtitles='{safe_ass}'"
 
-        total_duration = get_audio_duration(audio_path)
-        logging.info(f"Durasi audio: {total_duration:.2f} detik")
+            cmd_slide = ["ffmpeg", "-y"] + input_bg + [
+                "-i", slide_audio_path,
+                "-vf", vf_filter,
+                "-map", "0:v", "-map", "1:a",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+                "-c:a", "aac", "-b:a", "128k",
+                "-t", str(slide_duration),
+                slide_out_path
+            ]
+            
+            subprocess.run(cmd_slide, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if os.path.exists(slide_out_path):
+                rendered_slide_clips.append(slide_out_path)
 
-        # 1. Buat Subtitle ASS
-        ass_file = os.path.abspath("subtitles.ass")
-        create_ass_subtitle_file(full_narration, total_duration, text_segments, ass_file)
+        # E. Concatenate All Rendered Slides
+        concat_list_path = "concat_list.txt"
+        with open(concat_list_path, "w") as f:
+            for clip in rendered_slide_clips:
+                f.write(f"file '{os.path.abspath(clip)}'\n")
 
-        # 2. Download BGM
+        temp_concat_video = "temp_concat_no_bgm.mp4"
+        cmd_concat = [
+            "ffmpeg", "-y",
+            "-f", "concat", "-safe", "0",
+            "-i", concat_list_path,
+            "-c", "copy",
+            temp_concat_video
+        ]
+        subprocess.run(cmd_concat, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        # F. Inject Audio BGM (30% Volume)
         bgm_path = os.path.abspath("temp_bgm.mp3")
         bgm_url = "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
@@ -147,52 +177,35 @@ def assemble_video(video_paths, audio_path, text_segments, bgm_description=None,
                     with open(bgm_path, "wb") as f:
                         f.write(resp.content)
             except Exception as e:
-                logging.warning(f"BGM error: {e}")
+                logging.warning(f"BGM download warning: {e}")
 
         has_bgm = os.path.exists(bgm_path) and os.path.getsize(bgm_path) > 1000
-        valid_vpath = next((p for p in video_paths if p and os.path.exists(p)), None)
-
-        safe_ass = ass_file.replace(":", "\\:").replace("'", "'\\''")
-
-        # 3. Direct FFmpeg Mixing (BGM 30% / volume=0.30)
-        if valid_vpath:
-            input_args = ["-stream_loop", "-1", "-i", valid_vpath]
-            vf_filter = f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,subtitles='{safe_ass}'"
-        else:
-            input_args = ["-f", "lavfi", "-i", "color=c=black:s=1080x1920"]
-            vf_filter = f"subtitles='{safe_ass}'"
-
-        cmd = ["ffmpeg", "-y"] + input_args + ["-i", audio_path]
 
         if has_bgm:
-            cmd += ["-i", bgm_path]
-            filter_complex = (
-                f"[0:v]{vf_filter}[vout];"
-                f"[2:a]volume=0.30[bgm];[1:a][bgm]amix=inputs=2:duration=first[aout]"
-            )
-            cmd += ["-filter_complex", filter_complex, "-map", "[vout]", "-map", "[aout]"]
+            cmd_final = [
+                "ffmpeg", "-y",
+                "-i", temp_concat_video,
+                "-i", bgm_path,
+                "-filter_complex", "[1:a]volume=0.25[bgm];[0:a][bgm]amix=inputs=2:duration=first[aout]",
+                "-map", "0:v", "-map", "[aout]",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
+                output_path
+            ]
         else:
-            cmd += [
-                "-vf", vf_filter,
-                "-map", "0:v", "-map", "1:a"
+            cmd_final = [
+                "ffmpeg", "-y",
+                "-i", temp_concat_video,
+                "-c", "copy",
+                output_path
             ]
 
-        cmd += [
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-            "-c:a", "aac", "-b:a", "128k", "-t", str(total_duration),
-            output_path
-        ]
+        subprocess.run(cmd_final, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-        logging.info("Menjalankan Direct FFmpeg...")
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-        if result.returncode == 0 and os.path.exists(output_path):
-            logging.info(f"✅ Video berhasil: {output_path}")
+        if os.path.exists(output_path):
+            logging.info(f"✅ Video Multi-Slide Berhasil Dibuat: {output_path}")
             return output_path
-        else:
-            logging.error(f"FFmpeg error: {result.stderr}")
-            return None
+        return None
 
     except Exception as e:
-        logging.error(f"Render exception: {e}")
+        logging.error(f"Error pada assemble_video: {e}")
         return None
