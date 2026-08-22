@@ -41,7 +41,7 @@ def create_voiceover(text, output_filename="temp_audio.mp3", rate="-5%"):
     asyncio.run(generate_tts(text, output_filename, rate))
     return output_filename
 
-# ================== 3. HELPER DURASI MEDIA & WRAP TEKS ==================
+# ================== 3. HELPER DURASI & WRAPPER ==================
 def get_media_duration(media_path):
     cmd = [
         "ffprobe", "-v", "error",
@@ -56,7 +56,6 @@ def get_media_duration(media_path):
         return 5.0
 
 def wrap_text(text, max_chars=28):
-    """Mencegah teks terpotong di samping layar HP 1080px"""
     if not text:
         return ""
     words = text.split()
@@ -78,12 +77,20 @@ def wrap_text(text, max_chars=28):
         
     return r"\N".join(lines)
 
-# ================== 4. GENERATOR SUBTITLE ASS PER SLIDE ==================
+def format_ass_time(seconds):
+    hrs = int(seconds // 3600)
+    mins = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    cs = int((seconds - int(seconds)) * 100)
+    return f"{hrs}:{mins:02d}:{secs:02d}.{cs:02d}"
+
+# ================== 4. GENERATOR SUBTITLE 4-ZONA (STRICT LAYOUT) ==================
 def create_ass_for_slide(slide_data, duration, output_ass="slide_sub.ass"):
-    title = wrap_text(slide_data.get("title", "").upper(), max_chars=25)
+    title = wrap_text(slide_data.get("title", "").upper(), max_chars=26)
     main_text = wrap_text(slide_data.get("main_text", ""), max_chars=32)
     highlight = wrap_text(slide_data.get("highlight", ""), max_chars=28)
     source = slide_data.get("source", "")
+    vo_script = slide_data.get("vo_script", "")
     text_color_hex = slide_data.get("text_color", "#FFFF00").replace("#", "")
 
     # Convert Hex (#RRGGBB) -> ASS Format (&H00BBGGRR&)
@@ -91,14 +98,9 @@ def create_ass_for_slide(slide_data, duration, output_ass="slide_sub.ass"):
         r, g, b = text_color_hex[0:2], text_color_hex[2:4], text_color_hex[4:6]
         ass_color = f"&H00{b}{g}{r}&"
     else:
-        ass_color = "&H0000FFFF&"  # Fallback Cyan
+        ass_color = "&H0000FFFF&"
 
-    # Format Waktu ASS Presisi (H:MM:SS.cs)
-    hrs = int(duration // 3600)
-    mins = int((duration % 3600) // 60)
-    secs = int(duration % 60)
-    cs = int((duration - int(duration)) * 100)
-    time_end = f"{hrs}:{mins:02d}:{secs:02d}.{cs:02d}"
+    time_end_str = format_ass_time(duration)
 
     ass_content = f"""[Script Info]
 ScriptType: v4.00+
@@ -107,19 +109,44 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: HeaderTitle,DejaVu Sans,52,&H0000D7FF&,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,50,50,1400,1
-Style: MainHighlight,DejaVu Sans,48,{ass_color},&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,60,60,1050,1
-Style: SubBody,DejaVu Sans,40,&H00FFFFFF&,&H00000000,&H00000000,&H60000000,0,0,0,0,100,100,0,0,1,3,0,5,80,80,720,1
-Style: SourceFooter,DejaVu Sans,34,&H0000FFFF&,&H00000000,&H00000000,&H60000000,0,1,0,0,100,100,0,0,1,2,0,5,50,50,450,1
+Style: Zona1Header,DejaVu Sans,42,&H0000D7FF&,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,50,50,1550,1
+Style: Zona2Highlight,DejaVu Sans,44,{ass_color},&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,60,60,1220,1
+Style: Zona3MainBody,DejaVu Sans,34,&H00FFFFFF&,&H00000000,&H00000000,&H60000000,0,0,0,0,100,100,0,0,1,3,0,5,80,80,920,1
+Style: Zona3Source,DejaVu Sans,30,&H0000FFFF&,&H00000000,&H00000000,&H60000000,0,1,0,0,100,100,0,0,1,2,0,5,50,50,780,1
+Style: Zona4SubTTS,DejaVu Sans,38,&H0000FFFF&,&H00000000,&H00000000,&HA0000000,1,0,0,0,100,100,0,0,1,3,0,2,60,60,280,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 2,0:00:00.00,{time_end},HeaderTitle,,0,0,0,,{title}
-Dialogue: 2,0:00:00.00,{time_end},MainHighlight,,0,0,0,,{highlight}
-Dialogue: 1,0:00:00.00,{time_end},SubBody,,0,0,0,,{main_text}
 """
+    # ZONA 1: Header Statis (Top)
+    if title:
+        ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona1Header,,0,0,0,,{title}\n"
+
+    # ZONA 2: Highlight Utama (Upper Middle)
+    if highlight:
+        ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona2Highlight,,0,0,0,,{highlight}\n"
+
+    # ZONA 3: Main Text & Source (Lower Middle)
+    if main_text:
+        ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona3MainBody,,0,0,0,,{main_text}\n"
     if source:
-        ass_content += f"Dialogue: 1,0:00:00.00,{time_end},SourceFooter,,0,0,0,,{source}\n"
+        ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona3Source,,0,0,0,,{source}\n"
+
+    # ZONA 4: Subtitle Dinamis TTS Karaoke (Bottom)
+    words = vo_script.split()
+    if words:
+        chunks = []
+        i = 0
+        while i < len(words):
+            num = min(4, len(words) - i)
+            chunks.append(' '.join(words[i:i+num]))
+            i += num
+
+        dur_per_chunk = duration / max(len(chunks), 1)
+        for idx, chunk in enumerate(chunks):
+            t_start = format_ass_time(idx * dur_per_chunk)
+            t_end = format_ass_time((idx + 1) * dur_per_chunk)
+            ass_content += f"Dialogue: 2,{t_start},{t_end},Zona4SubTTS,,0,0,0,,{chunk}\n"
 
     with open(output_ass, "w", encoding="utf-8") as f:
         f.write(ass_content)
@@ -149,7 +176,7 @@ def assemble_video(slides_data, pexels_key, bgm_description="", output_path="fin
             slide_raw_video = f"temp_bg_{slide_id}.mp4"
             v_path = get_pexels_video(bg_kw, pexels_key, output_filename=slide_raw_video)
             
-            # C. Create Subtitle ASS Slide
+            # C. Create Subtitle ASS Slide (4-Zone Architecture)
             slide_ass_path = f"temp_sub_{slide_id}.ass"
             create_ass_for_slide(slide, slide_duration, slide_ass_path)
             safe_ass = os.path.abspath(slide_ass_path).replace(":", "\\:").replace("'", "'\\''")
