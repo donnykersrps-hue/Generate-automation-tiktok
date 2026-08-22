@@ -31,7 +31,7 @@ def get_pexels_video(keyword, api_key, output_filename="temp_video.mp4"):
         logging.error(f"Error Pexels for keyword '{keyword}': {e}")
         return None
 
-# ================== 2. EDGE TTS WITH REAL WORD BOUNDARIES ==================
+# ================== 2. EDGE TTS WITH WORD BOUNDARY TIMINGS ==================
 async def generate_tts_with_submaker(text, audio_path="temp_audio.mp3", rate="-5%"):
     voice = "id-ID-ArdiNeural"
     communicate = edge_tts.Communicate(text, voice, rate=rate)
@@ -49,7 +49,6 @@ async def generate_tts_with_submaker(text, audio_path="temp_audio.mp3", rate="-5
 def create_voiceover_with_sync(text, audio_path="temp_audio.mp3", rate="-5%"):
     return asyncio.run(generate_tts_with_submaker(text, audio_path, rate))
 
-# ALIAS UNTUK KOMPATIBILITAS MAIN.PY (MENCEGAH IMPORTERROR)
 def create_voiceover(text, output_filename="temp_audio.mp3", rate="-5%"):
     create_voiceover_with_sync(text, output_filename, rate)
     return output_filename
@@ -68,7 +67,7 @@ def get_media_duration(media_path):
     except Exception:
         return 5.0
 
-def wrap_text(text, max_chars=18):
+def wrap_text(text, max_chars=22):
     if not text:
         return ""
     words = text.split()
@@ -99,9 +98,9 @@ def format_ass_time(seconds):
 
 # ================== 4. GENERATOR SUBTITLE PRECISE TIMING 4-ZONA ==================
 def create_ass_for_slide(slide_data, duration, submaker, output_ass="slide_sub.ass"):
-    title = wrap_text(slide_data.get("title", "").upper(), max_chars=16)
-    main_text = wrap_text(slide_data.get("main_text", ""), max_chars=20)
-    highlight = wrap_text(slide_data.get("highlight", ""), max_chars=16)
+    title = wrap_text(slide_data.get("title", "").upper(), max_chars=20)
+    main_text = wrap_text(slide_data.get("main_text", ""), max_chars=24)
+    highlight = wrap_text(slide_data.get("highlight", ""), max_chars=20)
     source = slide_data.get("source", "")
     text_color_hex = slide_data.get("text_color", "#FFFF00").replace("#", "")
 
@@ -121,30 +120,30 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Zona1Header,DejaVu Sans,60,&H0000D7FF&,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,50,50,1620,1
-Style: Zona2Highlight,DejaVu Sans,68,{ass_color},&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,60,60,1250,1
-Style: Zona3MainBody,DejaVu Sans,48,&H00FFFFFF&,&H00000000,&H00000000,&H60000000,0,0,0,0,100,100,0,0,1,3,0,5,80,80,820,1
-Style: Zona3Source,DejaVu Sans,36,&H0000FFFF&,&H00000000,&H00000000,&H60000000,0,1,0,0,100,100,0,0,1,2,0,5,50,50,680,1
-Style: Zona4SubTTS,DejaVu Sans,44,&H0000FFFF&,&H00FF00FF&,&H00000000,&HA0000000,1,0,0,0,100,100,0,0,1,3,0,2,60,60,260,1
+Style: Zona1Header,DejaVu Sans,48,&H0000D7FF&,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,50,50,1650,1
+Style: Zona2Highlight,DejaVu Sans,52,{ass_color},&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,60,60,1280,1
+Style: Zona3MainBody,DejaVu Sans,36,&H00FFFFFF&,&H00000000,&H00000000,&H60000000,0,0,0,0,100,100,0,0,1,3,0,5,80,80,780,1
+Style: Zona3Source,DejaVu Sans,30,&H0000FFFF&,&H00000000,&H00000000,&H60000000,0,1,0,0,100,100,0,0,1,2,0,5,50,50,620,1
+Style: Zona4SubTTS,DejaVu Sans,42,&H0000FFFF&,&H00FF00FF&,&H00000000,&HA0000000,1,0,0,0,100,100,0,0,1,3,0,2,60,60,220,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    # ZONA 1: Header Statis
+    # ZONA 1: Header Statis (Top)
     if title:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona1Header,,0,0,0,,{title}\n"
 
-    # ZONA 2: Highlight Utama
+    # ZONA 2: Highlight Utama (Upper Middle)
     if highlight:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona2Highlight,,0,0,0,,{highlight}\n"
 
-    # ZONA 3: Main Text & Source
+    # ZONA 3: Main Text & Source (Lower Middle)
     if main_text:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona3MainBody,,0,0,0,,{main_text}\n"
     if source:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona3Source,,0,0,0,,{source}\n"
 
-    # ZONA 4: Subtitle Dinamis Karaoke (Perhitungan Offset Relatif & Jeda Napas Vokal)
+    # ZONA 4: Subtitle Dinamis Karaoke (Boundary Real-Time Synchronization)
     if submaker and hasattr(submaker, 'subs') and submaker.subs:
         words_data = []
         for sub in submaker.subs:
@@ -184,6 +183,29 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             
             k_text = " ".join(k_tokens)
             ass_content += f"Dialogue: 2,{t_s},{t_e},Zona4SubTTS,,0,0,0,,{k_text}\n"
+    else:
+        # Fallback Subtitle Per Frasa jika SubMaker kosong
+        words = slide_data.get("vo_script", "").split()
+        if words:
+            chunks = []
+            i = 0
+            while i < len(words):
+                num = min(4, len(words) - i)
+                chunks.append(words[i:i+num])
+                i += num
+
+            dur_per_chunk = duration / max(len(chunks), 1)
+            for idx, chunk_words in enumerate(chunks):
+                t_start_sec = idx * dur_per_chunk
+                t_end_sec = (idx + 1) * dur_per_chunk
+                t_start = format_ass_time(t_start_sec)
+                t_end = format_ass_time(t_end_sec)
+
+                chunk_duration_cs = int((t_end_sec - t_start_sec) * 100)
+                cs_per_word = max(10, chunk_duration_cs // max(len(chunk_words), 1))
+
+                karaoke_text = "".join([f"{{\\kf{cs_per_word}}}{w} " for w in chunk_words]).strip()
+                ass_content += f"Dialogue: 2,{t_start},{t_end},Zona4SubTTS,,0,0,0,,{karaoke_text}\n"
 
     with open(output_ass, "w", encoding="utf-8") as f:
         f.write(ass_content)
