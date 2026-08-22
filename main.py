@@ -157,7 +157,7 @@ if st.button("✨ Generate Naskah Multi-Slide"):
         with st.spinner("🤖 Gemini AI sedang meracik naskah & konsep visual multi-slide..."):
             try:
                 genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel("gemini-2.5-flash")
+                model = genai.GenerativeModel("gemini-3.6-flash")
                 
                 prompt = f"""
                 Kamu adalah pakar influencer TikTok profesional. Buatkan naskah video multi-slide TikTok berjumlah 4 slide tentang topik: "{topic_input}".
