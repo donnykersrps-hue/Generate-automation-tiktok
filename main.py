@@ -3,47 +3,37 @@ import json
 import os
 from render_engine import get_pexels_video, create_voiceover, assemble_video
 
-# ================== 1. PAGE CONFIG & CUSTOM CSS (AESTHETIC & NEON GLOW) ==================
+# ================== 1. PAGE CONFIG & CUSTOM CSS ==================
 st.set_page_config(
     page_title="AI TikTok Studio - Warm Aesthetic Edition",
     page_icon="🕌",
     layout="wide"
 )
 
-# Custom CSS Theme berdasarkan Foto Aesthetic Warm White + Neon Interactive Buttons
-st.markdown("""
+# Custom CSS Theme Warm White & Neon Interactive Buttons
+css_code = """
 <style>
-    /* Import Font Google */
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
 
-    html, body, [class*="css"]  {
+    html, body, [class*="css"] {
         font-family: 'Plus Jakarta Sans', sans-serif;
     }
 
-    /* Background Aplikasi Clean Warm White */
     .stApp {
         background: linear-gradient(180deg, #F8F9FA 0%, #F1F3F6 100%);
         color: #2D3748;
     }
 
-    /* Headers Styling */
     h1, h2, h3 {
         color: #1A202C !important;
         font-weight: 800 !important;
     }
 
-    /* Sidebar Styling */
     [data-testid="stSidebar"] {
         background-color: #FFFFFF !important;
         border-right: 1px solid #E2E8F0;
     }
 
-    /* Card Box & Container Styling */
-    div[data-testid="stExpander"], div.stMarkdownContainer > div {
-        border-radius: 14px;
-    }
-
-    /* Tombol Utama Interaktif Neon Glow */
     div.stButton > button {
         background: linear-gradient(135deg, #00FF9D 0%, #00E5FF 100%) !important;
         color: #0F172A !important;
@@ -53,38 +43,26 @@ st.markdown("""
         border: none !important;
         padding: 12px 28px !important;
         box-shadow: 0 4px 15px rgba(0, 255, 157, 0.4) !important;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        transition: all 0.3s ease-in-out !important;
         width: 100%;
     }
 
-    /* Hover State Interaksi Neon Terang */
     div.stButton > button:hover {
-        transform: translateY(-3px) scale(1.01);
+        transform: translateY(-2px);
         box-shadow: 0 0 25px rgba(0, 255, 157, 0.8), 0 0 35px rgba(0, 229, 255, 0.6) !important;
         color: #000000 !important;
     }
 
-    /* Active Click State */
-    div.stButton > button:active {
-        transform: translateY(1px);
-        box-shadow: 0 0 10px rgba(0, 255, 157, 0.9) !important;
-    }
-
-    /* Text Input & Text Area Styling */
     .stTextInput input, .stTextArea textarea {
         background-color: #FFFFFF !important;
         color: #1A202C !important;
         border: 1px solid #CBD5E1 !important;
         border-radius: 10px !important;
-        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05) !important;
-    }
-
-    .stTextInput input:focus, .stTextArea textarea:focus {
-        border-color: #00E5FF !important;
-        box-shadow: 0 0 10px rgba(0, 229, 255, 0.3) !important;
     }
 </style>
-""", unsafe_scale_html=True)
+"""
+
+st.markdown(css_code, unsafe_allow_html=True)
 
 # ================== 2. SIDEBAR API KEYS ==================
 with st.sidebar:
