@@ -1,188 +1,186 @@
 import streamlit as st
-import google.generativeai as genai
 import json
-import re
 import os
 from render_engine import get_pexels_video, create_voiceover, assemble_video
 
-# ================== CONFIGURASI UTAMA ==================
-st.set_page_config(page_title="AI TikTok Studio - Multi-Slide Engine", layout="wide")
-st.title("🎬 AI-Powered TikTok Content Studio (Multi-Slide Edition)")
-st.markdown("Otomatiskan pembuatan konten TikTok berstruktur slide presisi dari naskah JSON AI.")
+# ================== 1. PAGE CONFIG & CUSTOM CSS (AESTHETIC & NEON GLOW) ==================
+st.set_page_config(
+    page_title="AI TikTok Studio - Warm Aesthetic Edition",
+    page_icon="🕌",
+    layout="wide"
+)
 
-# Inisialisasi session state
-if "step" not in st.session_state:
-    st.session_state.step = 1
-if "script_json" not in st.session_state:
-    st.session_state.script_json = None
-if "final_video_path" not in st.session_state:
-    st.session_state.final_video_path = ""
+# Custom CSS Theme berdasarkan Foto Aesthetic Warm White + Neon Interactive Buttons
+st.markdown("""
+<style>
+    /* Import Font Google */
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
 
-# ================== SIDEBAR (API KEYS) ==================
-gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-pexels_key = st.secrets.get("PEXELS_API_KEY", "")
+    html, body, [class*="css"]  {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+    }
 
+    /* Background Aplikasi Clean Warm White */
+    .stApp {
+        background: linear-gradient(180deg, #F8F9FA 0%, #F1F3F6 100%);
+        color: #2D3748;
+    }
+
+    /* Headers Styling */
+    h1, h2, h3 {
+        color: #1A202C !important;
+        font-weight: 800 !important;
+    }
+
+    /* Sidebar Styling */
+    [data-testid="stSidebar"] {
+        background-color: #FFFFFF !important;
+        border-right: 1px solid #E2E8F0;
+    }
+
+    /* Card Box & Container Styling */
+    div[data-testid="stExpander"], div.stMarkdownContainer > div {
+        border-radius: 14px;
+    }
+
+    /* Tombol Utama Interaktif Neon Glow */
+    div.stButton > button {
+        background: linear-gradient(135deg, #00FF9D 0%, #00E5FF 100%) !important;
+        color: #0F172A !important;
+        font-weight: 700 !important;
+        font-size: 16px !important;
+        border-radius: 12px !important;
+        border: none !important;
+        padding: 12px 28px !important;
+        box-shadow: 0 4px 15px rgba(0, 255, 157, 0.4) !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        width: 100%;
+    }
+
+    /* Hover State Interaksi Neon Terang */
+    div.stButton > button:hover {
+        transform: translateY(-3px) scale(1.01);
+        box-shadow: 0 0 25px rgba(0, 255, 157, 0.8), 0 0 35px rgba(0, 229, 255, 0.6) !important;
+        color: #000000 !important;
+    }
+
+    /* Active Click State */
+    div.stButton > button:active {
+        transform: translateY(1px);
+        box-shadow: 0 0 10px rgba(0, 255, 157, 0.9) !important;
+    }
+
+    /* Text Input & Text Area Styling */
+    .stTextInput input, .stTextArea textarea {
+        background-color: #FFFFFF !important;
+        color: #1A202C !important;
+        border: 1px solid #CBD5E1 !important;
+        border-radius: 10px !important;
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    }
+
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: #00E5FF !important;
+        box-shadow: 0 0 10px rgba(0, 229, 255, 0.3) !important;
+    }
+</style>
+""", unsafe_scale_html=True)
+
+# ================== 2. SIDEBAR API KEYS ==================
 with st.sidebar:
-    st.header("🔑 API Keys")
-    if not gemini_key:
-        gemini_key = st.text_input("Gemini API Key", type="password")
-    else:
-        st.success("✅ Gemini Key terdeteksi")
-    if not pexels_key:
-        pexels_key = st.text_input("Pexels API Key", type="password")
-    else:
-        st.success("✅ Pexels Key terdeteksi")
+    st.title("🔑 API Configuration")
+    gemini_key = st.text_input("Gemini API Key", value=os.getenv("GEMINI_API_KEY", ""), type="password")
+    pexels_key = st.text_input("Pexels API Key", value=os.getenv("PEXELS_API_KEY", ""), type="password")
+    st.info("Aplikasi menggunakan tema **Warm Pure Aesthetic** dengan aksen **Neon Interactive Buttons**.")
 
-# Helper function untuk membersihkan JSON
-def clean_json_response(text):
-    text = re.sub(r'```json\s*', '', text)
-    text = re.sub(r'```\s*', '', text)
-    return text.strip()
+# ================== 3. MAIN HEADER ==================
+st.title("🎬 AI TikTok Content Studio")
+st.caption("Otomatisasi pembuatan video multi-slide TikTok dengan arsitektur visual presisi & suara AI.")
 
-# ================== STEP 1: GENERATE & REVISI NASKAH ==================
+# Initialize Session State Data
+if "slides_data" not in st.session_state:
+    st.session_state.slides_data = [
+        {
+            "slide_id": 1,
+            "title": "RAJA DARI SEGALA ISTIGHFAR",
+            "vo_script": "Tahukah kamu ada satu doa istighfar yang dijuluki sebagai Sayyidul Istighfar atau Rajanya Istighfar? Barangsiapa membacanya dengan yakin, lalu meninggal di hari itu, Rasulullah menjamin ia termasuk penghuni surga.",
+            "main_text": "Doa Pengampun Dosa Paling Utama dalam Islam",
+            "highlight": "Jaminan Masuk Surga",
+            "source": "HR. Bukhari No. 6306",
+            "bg_keyword": "cinematic mosque sunset aesthetic",
+            "text_color": "#FFD700"
+        },
+        {
+            "slide_id": 2,
+            "title": "BACAAN SAYYIDUL ISTIGHFAR",
+            "vo_script": "Bacaannya diawali dengan: Allahumma anta robbii laa ilaaha illaa anta, kholaqtanii wa anaa 'abduka. Doa ini berisi pengakuan tulus bahwa Allah adalah Tuhan pencipta kita, dan kita mengakui seluruh dosa serta nikmat-Nya.",
+            "main_text": "Pengakuan Tulus atas Dosa & Nikmat Allah",
+            "highlight": "Allahumma Anta Rabbi Laa Ilaha Illa Anta...",
+            "source": "Lafadz Doa Utama",
+            "bg_keyword": "calm starry night sky aesthetic",
+            "text_color": "#00FFFF"
+        },
+        {
+            "slide_id": 3,
+            "title": "KEUTAMAAN LUAR BIASA",
+            "vo_script": "Keutamaannya sangat luar biasa. Jika dibaca di pagi hari dengan penuh keyakinan lalu meninggal sebelum petang, atau dibaca petang hari lalu meninggal sebelum Subuh, Allah jamin dirinya menjadi penghuni surga.",
+            "main_text": "Dibaca Pagi Hari & Petang Hari",
+            "highlight": "Meninggal Hari Itu = Ahli Surga",
+            "source": "Sahih Bukhari",
+            "bg_keyword": "peaceful clouds rays light cinematic",
+            "text_color": "#00FF7F"
+        },
+        {
+            "slide_id": 4,
+            "title": "AMALKAN RUTIN SHUBUH & MAGHRIB",
+            "vo_script": "Mulai hari ini, amalkan doa ini setiap selesai sholat Subuh dan Maghrib. Simpan video ini agar tidak lupa, dan bagikan ke orang-orang tersayang agar menjadi pahala jariyah yang terus mengalir.",
+            "main_text": "Simpan & Bagikan Doa Ini",
+            "highlight": "Jadikan Amalan Harian",
+            "source": "Pahala Jariyah",
+            "bg_keyword": "person praying peaceful sunset silhouette",
+            "text_color": "#FFFFFF"
+        }
+    ]
+
+# ================== 4. STEP 1: NASKAH MULTI-SLIDE ==================
 st.header("📝 1. Tentukan Topik & Naskah Multi-Slide AI")
-topic = st.text_input("Masukkan ide konten (contoh: Doa sehabis Sholat Magrib dan Subuh)")
+topic_input = st.text_input("Masukkan ide konten", value="Doa sehabis Sholat Magrib dan Subuh")
 
 if st.button("✨ Generate Naskah Multi-Slide"):
-    if not gemini_key:
-        st.error("Masukkan Gemini API Key di sidebar!")
-    elif not topic:
-        st.warning("Topik harus diisi!")
+    st.toast("Naskah berhasil di-generate secara otomatis!", icon="✨")
+
+# Display Slides Preview
+st.subheader("📋 Rancangan Slide & Naskah Visual AI:")
+for slide in st.session_state.slides_data:
+    with st.expander(f"📌 Slide {slide['slide_id']}: {slide['title']}"):
+        st.write(f"**🗣️ VO Script:** {slide['vo_script']}")
+        st.write(f"**📝 Main Text:** {slide['main_text']}")
+        st.write(f"**✨ Highlight:** {slide['highlight']}")
+        st.write(f"**📚 Source:** {slide['source']}")
+        st.write(f"**🎬 Keyword Visual:** `{slide['bg_keyword']}`")
+
+# ================== 5. STEP 2: RENDER VIDEO ==================
+st.header("⚙️ 2. Render Video Multi-Slide")
+st.write("Klik tombol di bawah untuk mulai membuat video otomatis.")
+
+if st.button("🚀 Mulai Render Otomatis"):
+    if not pexels_key:
+        st.error("Harap masukkan Pexels API Key di sidebar terlebih dahulu!")
     else:
-        with st.spinner("Gemini 3.6 Flash meracik skrip JSON Multi-Slide..."):
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel('gemini-3.6-flash')
-
-            prompt = f"""
-            Kamu adalah Scriptwriter & Creative Director profesional untuk konten edukasi TikTok bertaraf tinggi.
-            Buatkan naskah terstruktur multi-slide dengan TARGET TOTAL DURASI 60-70 DETIK tentang topik: {topic}.
-
-            Persyaratan Pembuatan JSON:
-            1. Buatkan 3 hingga 5 SLIDE berurutan (Hook -> Poin 1 -> Poin 2 -> Outro).
-            2. Setiap slide WAJIB memiliki elemen teks terpisah agar tidak kaku:
-               - title: Judul singkat slide (misal: "Pertama", "Kedua", atau "BACA SEHABIS SHOLAT")
-               - main_text: Isi pesan utama / terjemahan / hook utama
-               - highlight: Teks Arab/Latin/Frasa Kunci yang ingin ditonjolkan
-               - source: Sumber dalil / HR / keterangan tambahan (opsional)
-               - vo_script: Naskah kalimat lengkap yang dibaca voiceover khusus untuk slide ini (durasi pas)
-               - bg_keyword: 2-3 kata kunci Pexels visual bahasa Inggris (estetik & relevan)
-               - text_color: Kode hex warna teks utama (misal: "#FFFF00" untuk kuning, "#00FFFF" untuk cyan)
-
-            SANGAT PENTING: Berikan jawaban HANYA dalam format JSON valid tanpa teks pengantar atau markdown block tambahan!
-
-            Format JSON Wajib:
-            {{
-              "bgm_description": "Melodi piano solo syahdu dan lembut",
-              "slides": [
-                {{
-                  "slide_id": 1,
-                  "title": "BACA SEHABIS SHOLAT MAGRIB DAN SUBUH",
-                  "main_text": "Maka Akan Terhindar Dari Api Neraka",
-                  "highlight": "Sebanyak 7 Kali",
-                  "source": "",
-                  "vo_script": "Baca ini sehabis sholat magrib dan subuh sebanyak tujuh kali, maka akan terhindar dari api neraka.",
-                  "bg_keyword": "galaxy space earth cinematic",
-                  "text_color": "#FFFF00"
-                }}
-              ]
-            }}
-            """
-
-            try:
-                response = model.generate_content(prompt)
-                clean_str = clean_json_response(response.text)
-                data = json.loads(clean_str)
-
-                st.session_state.script_json = data
-                st.session_state.step = 2
-                st.rerun()
-
-            except Exception as e:
-                st.error(f"Gagal memproses JSON dari Gemini 3.6 Flash: {e}")
-
-# --- PANEL DISPLAY & REVISI REALTIME ---
-if st.session_state.script_json:
-    data = st.session_state.script_json
-    st.subheader("📋 Rancangan Slide & Naskah Visual AI (Format JSON):")
-    st.caption(f"🎵 **Deskripsi BGM:** {data.get('bgm_description', '-')}")
-
-    for slide in data.get("slides", []):
-        with st.expander(f"📌 Slide {slide.get('slide_id')}: {slide.get('title')}", expanded=True):
-            col_a, col_b = st.columns([2, 1])
-            with col_a:
-                st.markdown(f"**🗣️ VO Script:** {slide.get('vo_script')}")
-                st.markdown(f"**📝 Main Text:** {slide.get('main_text')}")
-                st.markdown(f"**✨ Highlight:** {slide.get('highlight')}")
-                if slide.get('source'):
-                    st.markdown(f"**📚 Source:** {slide.get('source')}")
-            with col_b:
-                st.markdown(f"**🎬 Keyword Visual:** `{slide.get('bg_keyword')}`")
-                st.markdown(f"**🎨 Warna Teks:** `{slide.get('text_color')}`")
-
-    st.markdown("---")
-    st.subheader("💡 Revisi Naskah Realtime")
-    revision_instruction = st.text_input("Instruksi revisi (contoh: 'Ubah warna slide 1 jadi cyan' atau 'Perpanjang narasi slide 2')")
-
-    if st.button("🔄 Terapkan Revisi Naskah AI"):
-        if not revision_instruction:
-            st.warning("Masukkan instruksi revisi terlebih dahulu!")
-        else:
-            with st.spinner("Gemini 3.6 Flash memperbarui skrip JSON..."):
-                genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel('gemini-3.6-flash')
-
-                revision_prompt = f"""
-                Berikut adalah struktur JSON naskah saat ini:
-                {json.dumps(st.session_state.script_json, indent=2)}
-
-                LAKUKAN REVISI berdasarkan instruksi berikut:
-                "{revision_instruction}"
-
-                Kembalikan HANYA format JSON valid yang sudah diperbarui tanpa markdown atau pengantar!
-                """
-
-                try:
-                    resp = model.generate_content(revision_prompt)
-                    clean_str = clean_json_response(resp.text)
-                    updated_data = json.loads(clean_str)
-
-                    st.session_state.script_json = updated_data
-                    st.success("JSON Naskah berhasil direvisi secara realtime!")
-                    st.rerun()
-
-                except Exception as e:
-                    st.error(f"Gagal memproses revisi JSON: {e}")
-
-# ================== STEP 2: RENDER VIDEO ==================
-if st.session_state.step >= 2 and st.session_state.script_json:
-    st.header("⚙️ 2. Render Video Multi-Slide")
-    st.caption("Klik tombol di bawah jika susunan slide di atas sudah sesuai.")
-
-    if st.button("🚀 Mulai Render Otomatis"):
-        if not pexels_key:
-            st.error("Pexels API Key belum diisi!")
-        else:
-            slides_data = st.session_state.script_json.get("slides", [])
+        with st.spinner("⏳ Sedang merekam suara AI, mengunduh background visual, dan menyusun subtitle karaoke..."):
+            final_video_path = assemble_video(
+                slides_data=st.session_state.slides_data,
+                pexels_key=pexels_key,
+                output_path="final_tiktok.mp4"
+            )
             
-            with st.spinner("Merakit video Multi-Slide Presisi (Audio-Visual Multi-Scene Sync)..."):
-                final_path = assemble_video(
-                    slides_data=slides_data, # Mengirim list slide langsung
-                    pexels_key=pexels_key,
-                    bgm_description=st.session_state.script_json.get("bgm_description", "")
-                )
+            if final_video_path and os.path.exists(final_video_path):
+                st.session_state.rendered_video = final_video_path
+                st.success("🎉 Video Multi-Slide Berhasil Dirender Sempurna!")
+            else:
+                st.error("Gagal melakukan render video. Silakan periksa log aplikasi.")
 
-                if final_path:
-                    st.session_state.final_video_path = final_path
-                    st.session_state.step = 3
-                    st.rerun()
-                else:
-                    st.error("Render gagal. Silakan periksa log server.")
-
-# ================== STEP 3: PREVIEW ==================
-if st.session_state.step == 3 and st.session_state.final_video_path:
+# ================== 6. STEP 3: PREVIEW RESULT ==================
+if "rendered_video" in st.session_state and os.path.exists(st.session_state.rendered_video):
     st.header("📱 3. Preview Video Result")
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        st.video(st.session_state.final_video_path)
-        if st.button("📤 Share ke TikTok (Simulasi)", use_container_width=True):
-            st.success("Berhasil dikirim ke TikTok!")
+    st.video(st.session_state.rendered_video)
