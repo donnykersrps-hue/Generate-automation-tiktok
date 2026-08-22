@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import os
+import google.generativeai as genai
 from render_engine import get_pexels_video, create_voiceover, assemble_video
 
 # ================== 1. PAGE CONFIG & CUSTOM CSS (MIDNIGHT SYAHDU) ==================
@@ -100,7 +101,7 @@ with st.sidebar:
 st.title("🎬 AI TikTok Content Studio")
 st.caption("Otomatisasi pembuatan video multi-slide TikTok dengan arsitektur visual presisi & suara AI.")
 
-# Initialize Session State Data
+# Initialize Session State Data Default
 if "slides_data" not in st.session_state:
     st.session_state.slides_data = [
         {
@@ -145,22 +146,55 @@ if "slides_data" not in st.session_state:
         }
     ]
 
-# ================== 4. STEP 1: NASKAH MULTI-SLIDE ==================
+# ================== 4. STEP 1: NASKAH MULTI-SLIDE GEMINI AI ==================
 st.header("📝 1. Tentukan Topik & Naskah Multi-Slide AI")
-topic_input = st.text_input("Masukkan ide konten", value="Doa sehabis Sholat Magrib dan Subuh")
+topic_input = st.text_input("Masukkan ide konten", value="Tata cara Sholat Dhuha")
 
 if st.button("✨ Generate Naskah Multi-Slide"):
-    st.toast("Naskah berhasil di-generate secara otomatis!", icon="✨")
+    if not gemini_key:
+        st.error("Harap masukkan Gemini API Key di sidebar terlebih dahulu!")
+    else:
+        with st.spinner("🤖 Gemini AI sedang meracik naskah & konsep visual multi-slide..."):
+            try:
+                genai.configure(api_key=gemini_key)
+                model = genai.GenerativeModel("gemini-2.5-flash")
+                
+                prompt = f"""
+                Kamu adalah pakar influencer TikTok profesional. Buatkan naskah video multi-slide TikTok berjumlah 4 slide tentang topik: "{topic_input}".
+                
+                Kembalikan persis dalam format JSON murni Array of Objects tanpa format markdown ```json ``` dengan skema kunci:
+                [
+                  {{
+                    "slide_id": 1,
+                    "title": "JUDUL SLIDE 1 (2-4 KATA KAPITAL)",
+                    "vo_script": "Naskah narasi vokal yang menarik dan berbobot (2-3 kalimat)",
+                    "main_text": "Teks utama penjelasan singkat ringkas",
+                    "highlight": "Frasa kunci paling mencolok",
+                    "source": "Sumber riwayat/dalil/sumber informasi",
+                    "bg_keyword": "kata kunci visual pexels bahasa inggris misal: cinematic mosque sunset aesthetic",
+                    "text_color": "#FFD700"
+                  }}
+                ]
+                """
+                
+                response = model.generate_content(prompt)
+                raw_text = response.text.replace("```json", "").replace("```", "").strip()
+                generated_json = json.loads(raw_text)
+                
+                st.session_state.slides_data = generated_json
+                st.toast("🎉 Naskah berhasil dibuat oleh Gemini AI!", icon="✨")
+            except Exception as e:
+                st.error(f"Gagal meng-generate naskah: {e}")
 
 # Display Slides Preview
 st.subheader("📋 Rancangan Slide & Naskah Visual AI:")
 for slide in st.session_state.slides_data:
-    with st.expander(f"📌 Slide {slide['slide_id']}: {slide['title']}"):
-        st.write(f"**🗣️ VO Script:** {slide['vo_script']}")
-        st.write(f"**📝 Main Text:** {slide['main_text']}")
-        st.write(f"**✨ Highlight:** {slide['highlight']}")
-        st.write(f"**📚 Source:** {slide['source']}")
-        st.write(f"**🎬 Keyword Visual:** `{slide['bg_keyword']}`")
+    with st.expander(f"📌 Slide {slide.get('slide_id', 1)}: {slide.get('title', '')}"):
+        st.write(f"**🗣️ VO Script:** {slide.get('vo_script', '')}")
+        st.write(f"**📝 Main Text:** {slide.get('main_text', '')}")
+        st.write(f"**✨ Highlight:** {slide.get('highlight', '')}")
+        st.write(f"**📚 Source:** {slide.get('source', '')}")
+        st.write(f"**🎬 Keyword Visual:** `{slide.get('bg_keyword', '')}`")
 
 # ================== 5. STEP 2: RENDER VIDEO ==================
 st.header("⚙️ 2. Render Video Multi-Slide")
