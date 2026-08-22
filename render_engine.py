@@ -84,7 +84,7 @@ def format_ass_time(seconds):
     cs = int((seconds - int(seconds)) * 100)
     return f"{hrs}:{mins:02d}:{secs:02d}.{cs:02d}"
 
-# ================== 4. GENERATOR SUBTITLE 4-ZONA (STRICT LAYOUT) ==================
+# ================== 4. GENERATOR SUBTITLE KARAOKE 4-ZONA ==================
 def create_ass_for_slide(slide_data, duration, output_ass="slide_sub.ass"):
     title = wrap_text(slide_data.get("title", "").upper(), max_chars=26)
     main_text = wrap_text(slide_data.get("main_text", ""), max_chars=32)
@@ -109,16 +109,16 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Zona1Header,DejaVu Sans,42,&H0000D7FF&,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,50,50,1550,1
-Style: Zona2Highlight,DejaVu Sans,44,{ass_color},&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,60,60,1220,1
-Style: Zona3MainBody,DejaVu Sans,34,&H00FFFFFF&,&H00000000,&H00000000,&H60000000,0,0,0,0,100,100,0,0,1,3,0,5,80,80,920,1
-Style: Zona3Source,DejaVu Sans,30,&H0000FFFF&,&H00000000,&H00000000,&H60000000,0,1,0,0,100,100,0,0,1,2,0,5,50,50,780,1
-Style: Zona4SubTTS,DejaVu Sans,38,&H0000FFFF&,&H00000000,&H00000000,&HA0000000,1,0,0,0,100,100,0,0,1,3,0,2,60,60,280,1
+Style: Zona1Header,DejaVu Sans,40,&H0000D7FF&,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,50,50,1620,1
+Style: Zona2Highlight,DejaVu Sans,44,{ass_color},&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,0,5,60,60,1250,1
+Style: Zona3MainBody,DejaVu Sans,32,&H00FFFFFF&,&H00000000,&H00000000,&H60000000,0,0,0,0,100,100,0,0,1,3,0,5,80,80,820,1
+Style: Zona3Source,DejaVu Sans,28,&H0000FFFF&,&H00000000,&H00000000,&H60000000,0,1,0,0,100,100,0,0,1,2,0,5,50,50,700,1
+Style: Zona4SubTTS,DejaVu Sans,44,&H0000FFFF&,&H00FF00FF&,&H00000000,&HA0000000,1,0,0,0,100,100,0,0,1,3,0,2,60,60,260,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    # ZONA 1: Header Statis (Top)
+    # ZONA 1: Header Statis (Top - Renggang)
     if title:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona1Header,,0,0,0,,{title}\n"
 
@@ -126,27 +126,35 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     if highlight:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona2Highlight,,0,0,0,,{highlight}\n"
 
-    # ZONA 3: Main Text & Source (Lower Middle)
+    # ZONA 3: Main Text & Source (Lower Middle - Renggang)
     if main_text:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona3MainBody,,0,0,0,,{main_text}\n"
     if source:
         ass_content += f"Dialogue: 1,0:00:00.00,{time_end_str},Zona3Source,,0,0,0,,{source}\n"
 
-    # ZONA 4: Subtitle Dinamis TTS Karaoke (Bottom)
+    # ZONA 4: Subtitle Dinamis Karaoke (Bottom Bar - Font 44pt + Color Fill)
     words = vo_script.split()
     if words:
         chunks = []
         i = 0
         while i < len(words):
             num = min(4, len(words) - i)
-            chunks.append(' '.join(words[i:i+num]))
+            chunks.append(words[i:i+num])
             i += num
 
         dur_per_chunk = duration / max(len(chunks), 1)
-        for idx, chunk in enumerate(chunks):
-            t_start = format_ass_time(idx * dur_per_chunk)
-            t_end = format_ass_time((idx + 1) * dur_per_chunk)
-            ass_content += f"Dialogue: 2,{t_start},{t_end},Zona4SubTTS,,0,0,0,,{chunk}\n"
+        for idx, chunk_words in enumerate(chunks):
+            t_start_sec = idx * dur_per_chunk
+            t_end_sec = (idx + 1) * dur_per_chunk
+            t_start = format_ass_time(t_start_sec)
+            t_end = format_ass_time(t_end_sec)
+
+            # Hitung alokasi waktu karaoke per kata (centiseconds)
+            chunk_duration_cs = int((t_end_sec - t_start_sec) * 100)
+            cs_per_word = max(10, chunk_duration_cs // max(len(chunk_words), 1))
+
+            karaoke_text = "".join([f"{{\\kf{cs_per_word}}}{w} " for w in chunk_words]).strip()
+            ass_content += f"Dialogue: 2,{t_start},{t_end},Zona4SubTTS,,0,0,0,,{karaoke_text}\n"
 
     with open(output_ass, "w", encoding="utf-8") as f:
         f.write(ass_content)
@@ -161,22 +169,22 @@ def assemble_video(slides_data, pexels_key, bgm_description="", output_path="fin
     rendered_slide_clips = []
     
     try:
-        # Loop Render Per Slide (Frame-Accurate Sync)
+        # Loop Render Per Slide
         for idx, slide in enumerate(slides_data):
             slide_id = slide.get("slide_id", idx + 1)
             vo_script = slide.get("vo_script", "")
             bg_kw = slide.get("bg_keyword", "cinematic nature")
             
-            # A. Generate Voiceover Slide
+            # A. Voiceover Slide
             slide_audio_path = f"temp_vo_{slide_id}.mp3"
             create_voiceover(vo_script, slide_audio_path)
             slide_duration = get_media_duration(slide_audio_path)
             
-            # B. Download Background Video
+            # B. Background Video
             slide_raw_video = f"temp_bg_{slide_id}.mp4"
             v_path = get_pexels_video(bg_kw, pexels_key, output_filename=slide_raw_video)
             
-            # C. Create Subtitle ASS Slide (4-Zone Architecture)
+            # C. Subtitle ASS Karaoke Slide
             slide_ass_path = f"temp_sub_{slide_id}.ass"
             create_ass_for_slide(slide, slide_duration, slide_ass_path)
             safe_ass = os.path.abspath(slide_ass_path).replace(":", "\\:").replace("'", "'\\''")
@@ -205,7 +213,7 @@ def assemble_video(slides_data, pexels_key, bgm_description="", output_path="fin
             if os.path.exists(slide_out_path):
                 rendered_slide_clips.append(slide_out_path)
 
-        # E. Concatenate All Rendered Slides
+        # E. Concatenate Slides
         concat_list_path = "concat_list.txt"
         with open(concat_list_path, "w") as f:
             for clip in rendered_slide_clips:
@@ -221,7 +229,7 @@ def assemble_video(slides_data, pexels_key, bgm_description="", output_path="fin
         ]
         subprocess.run(cmd_concat, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-        # F. Inject Audio BGM (Volume 25%)
+        # F. Inject Audio BGM (25%)
         bgm_path = os.path.abspath("temp_bgm.mp3")
         bgm_url = "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
