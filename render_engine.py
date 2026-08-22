@@ -49,6 +49,11 @@ async def generate_tts_with_submaker(text, audio_path="temp_audio.mp3", rate="-5
 def create_voiceover_with_sync(text, audio_path="temp_audio.mp3", rate="-5%"):
     return asyncio.run(generate_tts_with_submaker(text, audio_path, rate))
 
+# ALIAS UNTUK KOMPATIBILITAS MAIN.PY (MENCEGAH IMPORTERROR)
+def create_voiceover(text, output_filename="temp_audio.mp3", rate="-5%"):
+    create_voiceover_with_sync(text, output_filename, rate)
+    return output_filename
+
 # ================== 3. HELPER DURASI & WRAPPER ==================
 def get_media_duration(media_path):
     cmd = [
@@ -149,7 +154,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 'end': sub.end.total_seconds()
             })
 
-        # Kelompokkan kata per frasa (maksimal 4 kata per frasa)
         chunks = []
         i = 0
         while i < len(words_data):
@@ -167,13 +171,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             last_time = chunk_start
             
             for item in chunk:
-                # Sisipkan Tag Silence (Jeda) jika ada jarak napas antar kata
                 silence_duration = item['start'] - last_time
                 if silence_duration > 0.02:
                     silence_cs = int(silence_duration * 100)
                     k_tokens.append(f"{{\\kf{silence_cs}}}")
                 
-                # Hitung durasi pengucapan kata asli (centiseconds)
                 word_dur_cs = int((item['end'] - item['start']) * 100)
                 word_dur_cs = max(5, word_dur_cs)
                 k_tokens.append(f"{{\\kf{word_dur_cs}}}{item['word']}")
