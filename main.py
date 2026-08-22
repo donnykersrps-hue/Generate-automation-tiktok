@@ -3,14 +3,14 @@ import json
 import os
 from render_engine import get_pexels_video, create_voiceover, assemble_video
 
-# ================== 1. PAGE CONFIG & CUSTOM CSS ==================
+# ================== 1. PAGE CONFIG & CUSTOM CSS (MIDNIGHT SYAHDU) ==================
 st.set_page_config(
-    page_title="AI TikTok Studio - Warm Aesthetic Edition",
-    page_icon="🕌",
+    page_title="AI TikTok Studio - Midnight Syahdu Edition",
+    page_icon="🌙",
     layout="wide"
 )
 
-# Custom CSS Theme Warm White & Neon Interactive Buttons
+# Custom CSS Dark Theme Midnight Syahdu & Neon Interactive Buttons
 css_code = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
@@ -19,45 +19,70 @@ css_code = """
         font-family: 'Plus Jakarta Sans', sans-serif;
     }
 
+    /* Background Utama App Dark Midnight */
     .stApp {
-        background: linear-gradient(180deg, #F8F9FA 0%, #F1F3F6 100%);
-        color: #2D3748;
+        background: linear-gradient(180deg, #0B0F19 0%, #111827 100%);
+        color: #F8FAFC;
     }
 
-    h1, h2, h3 {
-        color: #1A202C !important;
+    /* Text Header Color Adjustments */
+    h1, h2, h3, h4, h5, h6, label {
+        color: #F8FAFC !important;
         font-weight: 800 !important;
     }
 
+    /* Sidebar Dark Styling */
     [data-testid="stSidebar"] {
-        background-color: #FFFFFF !important;
-        border-right: 1px solid #E2E8F0;
+        background-color: #0F172A !important;
+        border-right: 1px solid #1E293B;
     }
 
+    /* Card Box / Expander Glassmorphism Styling */
+    div[data-testid="stExpander"], div.stMarkdownContainer > div {
+        background-color: #1E293B !important;
+        border-radius: 14px;
+        border: 1px solid rgba(56, 189, 248, 0.2) !important;
+        color: #F8FAFC !important;
+    }
+
+    /* Tombol Interaksi Neon Glowing */
     div.stButton > button {
         background: linear-gradient(135deg, #00FF9D 0%, #00E5FF 100%) !important;
-        color: #0F172A !important;
-        font-weight: 700 !important;
+        color: #020617 !important;
+        font-weight: 800 !important;
         font-size: 16px !important;
         border-radius: 12px !important;
         border: none !important;
         padding: 12px 28px !important;
-        box-shadow: 0 4px 15px rgba(0, 255, 157, 0.4) !important;
-        transition: all 0.3s ease-in-out !important;
+        box-shadow: 0 0 15px rgba(0, 255, 157, 0.4) !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         width: 100%;
     }
 
+    /* Hover State Interaksi Neon Terang Nyala di Atas Mode Gelap */
     div.stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 0 25px rgba(0, 255, 157, 0.8), 0 0 35px rgba(0, 229, 255, 0.6) !important;
+        transform: translateY(-2px) scale(1.01);
+        box-shadow: 0 0 30px rgba(0, 255, 157, 0.9), 0 0 45px rgba(0, 229, 255, 0.7) !important;
         color: #000000 !important;
     }
 
+    /* Active Click State */
+    div.stButton > button:active {
+        transform: translateY(1px);
+        box-shadow: 0 0 12px rgba(0, 255, 157, 0.9) !important;
+    }
+
+    /* Text Input & Text Area Dark Theme Styling */
     .stTextInput input, .stTextArea textarea {
-        background-color: #FFFFFF !important;
-        color: #1A202C !important;
-        border: 1px solid #CBD5E1 !important;
+        background-color: #0F172A !important;
+        color: #F8FAFC !important;
+        border: 1px solid #334155 !important;
         border-radius: 10px !important;
+    }
+
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: #00E5FF !important;
+        box-shadow: 0 0 12px rgba(0, 229, 255, 0.5) !important;
     }
 </style>
 """
@@ -69,7 +94,7 @@ with st.sidebar:
     st.title("🔑 API Configuration")
     gemini_key = st.text_input("Gemini API Key", value=os.getenv("GEMINI_API_KEY", ""), type="password")
     pexels_key = st.text_input("Pexels API Key", value=os.getenv("PEXELS_API_KEY", ""), type="password")
-    st.info("Aplikasi menggunakan tema **Warm Pure Aesthetic** dengan aksen **Neon Interactive Buttons**.")
+    st.info("Aplikasi menggunakan tema **Midnight Syahdu Aesthetic** dengan aksen **Neon Interactive Glow**.")
 
 # ================== 3. MAIN HEADER ==================
 st.title("🎬 AI TikTok Content Studio")
