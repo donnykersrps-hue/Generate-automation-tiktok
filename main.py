@@ -38,12 +38,20 @@ css_code = """
         border-right: 1px solid #1E293B;
     }
 
-    /* Card Box / Expander Glassmorphism Styling */
+    /* Card Box / Expander Glassmorphism Base Styling */
     div[data-testid="stExpander"], div.stMarkdownContainer > div {
         background-color: #1E293B !important;
         border-radius: 14px;
         border: 1px solid rgba(56, 189, 248, 0.2) !important;
         color: #F8FAFC !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+
+    /* Interaksi Neon Ungu saat Dropdown (Expander) Disentuh Kursor */
+    div[data-testid="stExpander"]:hover {
+        border-color: #C084FC !important;
+        box-shadow: 0 0 22px rgba(192, 132, 252, 0.6), inset 0 0 10px rgba(168, 85, 247, 0.2) !important;
+        transform: translateY(-2px);
     }
 
     /* Tombol Interaksi Neon Glowing */
@@ -217,7 +225,10 @@ if st.button("🚀 Mulai Render Otomatis"):
             else:
                 st.error("Gagal melakukan render video. Silakan periksa log aplikasi.")
 
-# ================== 6. STEP 3: PREVIEW RESULT ==================
+# ================== 6. STEP 3: PREVIEW RESULT (30% COMPACT VIEWPORT) ==================
 if "rendered_video" in st.session_state and os.path.exists(st.session_state.rendered_video):
     st.header("📱 3. Preview Video Result")
-    st.video(st.session_state.rendered_video)
+    # Menggunakan Layout Kolom [1.1, 1, 1.1] untuk Mengunci Ukuran Video di ~30%
+    col_left, col_video, col_right = st.columns([1.1, 1, 1.1])
+    with col_video:
+        st.video(st.session_state.rendered_video)
